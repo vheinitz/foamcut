@@ -1,0 +1,31 @@
+; foamcut wing
+
+[profil]
+root_airfoil = clarkk.dat
+root_chord = 120
+tip_airfoil = 
+tip_chord = 50
+panel = 400
+sweep = 0
+washout = 0
+mirror = nein
+
+[lage]
+root_gap = 50
+block_x = 20
+table_y = -6.8
+lead = 3
+
+[schnitt]
+feed = 150
+wire = 0
+warmup = 3
+kerf = 1.0
+points = 60
+
+[block]
+block_s = 280
+block_w = 140
+block_len = 200
+block_y = 0
+block_h = 20

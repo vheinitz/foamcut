@@ -1,0 +1,11 @@
+; square 50.0 mm, both towers identical
+G21 ; mm
+G90 ; absolute
+G94 ; units per minute
+G1 F300
+G1 X0.000 Y0.000 U0.000 V0.000
+G1 X50.000 Y0.000 U50.000 V0.000
+G1 X50.000 Y50.000 U50.000 V50.000
+G1 X0.000 Y50.000 U0.000 V50.000
+G1 X0.000 Y0.000 U0.000 V0.000
+M2

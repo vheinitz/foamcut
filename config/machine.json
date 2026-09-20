@@ -1,0 +1,60 @@
+{
+  "cut_feed": 300.0,
+  "homing": {
+    "auto": true,
+    "enabled": true,
+    "feed": 40.0,
+    "home_mpos": {
+      "U": -218.0,
+      "V": -98.0,
+      "X": -218.0,
+      "Y": -98.0
+    },
+    "invert_switch": true,
+    "length_mm": {
+      "U": 220.0,
+      "V": 100.0,
+      "X": 220.0,
+      "Y": 100.0
+    },
+    "offset_mm": {
+      "U": 0.0,
+      "V": 0.0,
+      "X": 0.0,
+      "Y": 0.0
+    },
+    "pulloff": 2.0,
+    "seek": 150.0,
+    "soft_limits": true
+  },
+  "invert_dir": {
+    "U": false,
+    "V": true,
+    "X": false,
+    "Y": true
+  },
+  "jog_feed": 375.0,
+  "max_rate": {
+    "U": 375.0,
+    "V": 137.9,
+    "X": 750.0,
+    "Y": 137.9
+  },
+  "notes": "",
+  "steps_per_mm": {
+    "U": 3200.0,
+    "V": 8704.0,
+    "X": 1600.0,
+    "Y": 8704.0
+  },
+  "tower_gap_measured": true,
+  "tower_gap_mm": 615.0,
+  "travel_mm": {
+    "U": 218.0,
+    "V": 98.0,
+    "X": 218.0,
+    "Y": 98.0
+  },
+  "wire_fixed_tower": 2,
+  "wire_power": 0
+}

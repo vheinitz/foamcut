@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# foamcut command line tool - runs from the checkout, no installation needed.
+exec env PYTHONPATH="$(dirname "$(readlink -f "$0")")/host" python3 -m foamcut.cli "$@"

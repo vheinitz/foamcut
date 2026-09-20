@@ -1,0 +1,57 @@
+; Fluegel-Panel fuer den Schaumschneider. Alle Masse in mm.
+; Zeilen mit ; sind Kommentare. Profildateien liegen in airfoil/.
+
+[profil]
+root_airfoil = clarky.dat     ; Profil an der Wurzel (Rumpfseite)
+root_chord   = 100            ; Wurzeltiefe
+tip_airfoil  =                ; Profil am Ende, leer = wie Wurzel
+tip_chord    = 80             ; Endtiefe (= Wurzeltiefe fuer einen Rechteckfluegel)
+panel        = 400            ; Panellaenge (Halbspannweite dieses Stuecks)
+area         =                ; Flaeche des Panels in dm²; gesetzt -> Tiefen aus Flaeche, Panel und Zuspitzung
+taper        = 1              ; Zuspitzung Endtiefe/Wurzeltiefe fuer die Flaechenrechnung (1 = Rechteck)
+sweep        = 0              ; Pfeilung: Nasenleiste am Ende um so viel nach hinten
+washout      = 0              ; Schraenkung in Grad, positiv = Nase am Ende runter
+mirror       = nein           ; ja | nein  (spiegelverkehrt, siehe Hinweis unten)
+
+[ruder]                       ; optionaler Scharnierschnitt von der Unterseite (Querruder/Klappe)
+aileron      = 0              ; Rudertiefe in % der Profiltiefe ab Hinterkante, 0 = kein Schnitt
+hinge_skin   = 1.5            ; Schaum, der an der Oberseite als Scharnier stehen bleibt
+hinge_v      = 0              ; Breite der V-Kerbe unten, 0 = gerader Schlitz
+
+[lage]
+root_gap     = 150            ; Wurzelseite des Blocks ab Turm mit festem Draht
+block_x      = 20             ; X der Blockrueckseite (vom Referenzpunkt); dort taucht der Draht ein
+table_y      = 31             ; Y der Tischoberkante (= Blockunterkante); Sehne folgt daraus + Rand
+lead         = 12             ; Einlauf im Schaum von der Rueckseite bis zur Hinterkante
+
+[block]                       ; leer = Mindestblock (Profil + Rand), nur Vorschau/Plausibilitaet
+block_s      =                ; Blockanfang ab Wurzelebene, leer = 0
+block_w      =                ; Breite in Spannrichtung, leer = Panel + Rand
+block_len    =
+block_y      =
+block_h      =
+
+[schnitt]
+feed         = 200            ; Drahtgeschwindigkeit im Schaum, mm/min (schnellere Ebene)
+wire         = 0              ; Heizleistung S 1..255, 0 = Schieber der GUI
+warmup       = 3              ; Sekunden Aufheizen vor dem Einlauf
+kerf         = 1.0            ; Schnittbreite; der Pfad liegt kerf/2 ausserhalb der Kontur
+points       = 60             ; Stuetzpunkte je Profilseite
+margin       = 10             ; Rand des Profils zu Vorder-, Ober-, Unter- und Endseite des Blocks
+
+; Die Wurzel liegt immer am Turm, an dem der Draht fest eingespannt ist
+; (config/machine.json: wire_fixed_tower, `foamcut machine set --wire-fixed 1|2`);
+; nur dieses Ende ist ein genauer Bezug, am anderen zieht das Gewicht.
+; mirror = ja schneidet das Profil kopfueber (an der Sehne gespiegelt). Das
+; fertige Teil um seine Sehnenachse gedreht ist der gegenueberliegende Fluegel.
+; Bei Rechteckfluegeln ohne Schraenkung nicht noetig. Alte Dateien mit
+; side = links|rechts werden weiter gelesen (rechts = nein, links = ja).
+;
+; Lage: der Block liegt auf dem Tisch. block_x = Blockrueckseite, table_y =
+; Tischoberkante = Blockunterkante; das Profil liegt `margin` darueber, der
+; Einlauf `lead` davor. Der Block-Schritt der GUI (bzw. die Ausgabe von
+; `foamcut wing`) nennt den Mindestblock, den moeglichen Tischhoehenbereich
+; (Verfahrweg) und wie weit der Tisch in Spannrichtung reichen darf, bevor der
+; extrapolierte Draht neben dem Block unter die Tischhoehe taucht. Eilgaenge
+; heben erst, dann fahren sie vor (und zurueck: erst zurueck, dann senken).
+; Alte Dateien mit te_x / chord_y werden umgerechnet (gleicher Schnitt).

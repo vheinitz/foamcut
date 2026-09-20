@@ -1,0 +1,29 @@
+; foamcut wing
+
+[profil]
+root_airfoil = clarky.dat
+root_chord = 200
+tip_airfoil = 
+tip_chord = 200
+panel = 400
+sweep = 0
+washout = 0
+mirror = ja
+
+[lage]
+root_gap = 150
+block_x = 8
+table_y = -23.8
+lead = 12
+
+[schnitt]
+feed = 150
+wire = 0
+warmup = 3
+kerf = 1.0
+points = 60
+
+[block]
+block_len = 250
+block_y = 5
+block_h = 20

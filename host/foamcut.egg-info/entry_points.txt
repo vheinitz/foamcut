@@ -1,0 +1,2 @@
+[console_scripts]
+foamcut = foamcut.cli:main

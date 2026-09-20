@@ -1,0 +1,11 @@
+; taper: left 60 mm, right 30 mm, height 40 mm
+G21 ; mm
+G90 ; absolute
+G94 ; units per minute
+G1 F300
+G1 X0.000 Y0.000 U0.000 V0.000
+G1 X60.000 Y0.000 U30.000 V0.000
+G1 X60.000 Y40.000 U30.000 V40.000
+G1 X0.000 Y40.000 U0.000 V40.000
+G1 X0.000 Y0.000 U0.000 V0.000
+M2

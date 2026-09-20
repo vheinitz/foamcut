@@ -1,0 +1,90 @@
+# grbl-Mega-5X settings for the GT2560 XYUV hot wire cutter.
+#
+# Apply with:   foamcut settings apply config/grbl_settings_foamcut.txt
+# Read back:    foamcut settings dump
+#
+# Axis order is X Y U V -> $100..$103, $110..$113, $120..$123, $130..$133.
+# Everything marked MACHINE must be measured on your machine; see
+# docs/bringup.md step 5 (steps/mm calibration).
+
+# --- stepper timing -------------------------------------------------------
+$0=10        # step pulse, us (A4988/DRV8825 need >= 2 us; 10 is safe)
+$1=25        # step idle delay, ms. All four axes are self-locking lead
+             # screws, so the motors are released 25 ms after standstill:
+             # zero hold current, no driver heat, no drift. (255 = never
+             # release - only for belt axes, which this machine has none of.)
+$2=0         # step port invert mask
+$3=10        # direction invert: Y and V (bits 1 and 3). Measured: +Y/+V ran down.
+$4=0         # invert stepper enable (0 is correct for A4988: EN is active low)
+$5=0         # invert limit pins: 0 = NO switch to GND (internal pull-up),
+             # 1 = NC switch. machine.json "homing.invert_switch" overrides.
+$6=0         # invert probe pin
+
+# --- reporting ------------------------------------------------------------
+$10=3        # status report: machine position + buffer state
+$11=0.010    # junction deviation, mm
+$12=0.002    # arc tolerance, mm
+$13=0        # report in mm
+
+# --- limits and homing ----------------------------------------------------
+# Base values for a machine WITHOUT switches. Once "homing.enabled" is true in
+# config/machine.json (foamcut homing set --enable / GUI "Endschalter…"), the GUI
+# and foamcut home push $5 $20 $22 $23 $24 $25 $27 $130..$133 from there instead.
+$20=0        # soft limits: need homing, so off here; on with switches
+$21=0        # hard limits off. Needs ENABLE_RAMPS_HW_LIMITS in config.h,
+             # because no GT2560 endstop input has a pin change interrupt.
+$22=0        # homing off without switches
+$23=0        # homing direction: with switches 15 = all four seek toward the
+             # negative end (X/U back, Y/V down)
+$24=100.0    # homing feed, mm/min
+$25=800.0    # homing seek, mm/min
+$26=50       # homing debounce, ms
+$27=3.0      # homing pull-off, mm
+
+# --- hot wire (grbl calls it the spindle) --------------------------------
+$30=255      # max "spindle" speed. The PWM is 8 bit, so S255 = 100 % duty and
+             # an S value is directly the PWM count.
+$31=0        # min
+$32=0        # laser mode off. Setting $32=1 scales wire power with feed rate,
+             # which reduces kerf in corners - try it once cutting works.
+
+# --- steps per mm ---------------------------------------------------------
+# Measured 2026-09-12:
+#   horizontal NEMA17, T8x2:  20 mm at 2560 -> 32 mm      => 1600  (2.0 mm/rev)
+#   vertical   NEMA14 screw:  20 mm at 2560 -> ~5.9 mm, then
+#                             20 mm at 10240 -> 17 mm     => 8704  (0.37 mm/rev)
+# TMC2208/2209 standalone, MS1+MS2 jumpered = 1/16, 3200 steps/rev.
+# Directions: +X/+U = forward (origin at the back) as wired; +Y/+V = up needs $3=10.
+$100=1600.0  # X  tower 1, horizontal
+$101=8704.0  # Y  tower 1, vertical
+$102=1600.0  # U  tower 2, horizontal
+$103=8704.0  # V  tower 2, vertical
+
+# --- max rate, mm/min -----------------------------------------------------
+# The limit is grbl's stepper interrupt on the ATmega2560. Measured on this
+# machine 2026-09-13: 24 kHz runs, 30 kHz (1125 mm/min on X) locks the MCU
+# up mid-move - it stops answering until the port is reopened (DTR reset).
+# Budget is 20 kHz (MAX_STEP_HZ in machine.py); the GUI derives these from
+# steps/mm and clamps anything higher:
+#   horizontal 20000 / 1600 = 12.5 mm/s = 750 mm/min
+#   vertical   20000 / 8704 =  2.3 mm/s = 138 mm/min
+# grbl scales any move down to respect these, so a mostly vertical move is
+# simply slower. Foam is cut at 100-500 mm/min anyway.
+$110=750.0
+$111=137.9
+$112=750.0
+$113=137.9
+
+# --- acceleration, mm/s^2 -------------------------------------------------
+$120=200.0
+$121=200.0
+$122=200.0
+$123=200.0
+
+# --- max travel, mm -------------------------------------------------------
+# Not used by grbl without homing ($20 needs $22). foamcut setup --phases travel
+# measures the real values into config/machine.json, which foamcut run enforces.
+$130=400.0   # placeholder
+$131=300.0   # placeholder
+$132=400.0   # placeholder
+$133=300.0   # placeholder

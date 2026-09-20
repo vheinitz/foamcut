@@ -1,0 +1,22 @@
+[project]
+name = "foamcut"
+version = "0.1.0"
+description = "Host tooling for a GT2560 driven XYUV hot wire foam cutter"
+requires-python = ">=3.10"
+dependencies = ["pyserial>=3.5", "PyQt6>=6.4"]
+
+[project.scripts]
+foamcut = "foamcut.cli:main"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["foamcut*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

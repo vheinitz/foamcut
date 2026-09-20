@@ -1,0 +1,48 @@
+; Freie Form fuer den Schaumschneider: ein Querschnitt je Seite, Scheibe oder Ring.
+; Alle Masse in mm. Zeilen mit ; sind Kommentare.
+
+[form]  ; Form
+panel        = 200          ; Laenge [mm]: Laenge des Stuecks in Spannrichtung, von Seite A (am Turm mit festem Draht) bis Seite B.
+points       = 72           ; Stuetzpunkte: Punkte je Umfang (aussen und Loch). Mehr = runder, mehr G-Code-Zeilen.
+
+[a]  ; Seite A (Wurzel)
+a_kind       = rechteck     ; Form: Grundform des Querschnitts: Rechteck oder Dreieck (Grundseite unten, Spitze oben) mit Eckenradius, Kreis (Breite = Hoehe) oder Ellipse.
+a_w          = 60           ; Breite X [mm]: Breite in X (vorn-hinten).
+a_h          = 40           ; Hoehe Y [mm]: Hoehe in Y. Beim Kreis wird die Breite genommen.
+a_r          = 8            ; Eckenradius [mm]: Eckenradius bei Rechteck/Dreieck; 0 = scharfe Ecken, bei Kreis/Ellipse ohne Wirkung.
+a_hole       = keine        ; Loch: Loch in der Mitte fuer einen Ring, gleiche Formen wie aussen. Der Draht schneidet aussen herum, dann durch einen Schlitz hinten zum Loch, das Loch, und wieder hinaus. Beide Seiten brauchen ein Loch oder keines.
+a_hole_w     = 20           ; Loch Breite X [mm]: Breite des Lochs in X.
+a_hole_h     = 20           ; Loch Hoehe Y [mm]: Hoehe des Lochs in Y (Kreis: Breite).
+a_hole_r     = 0            ; Loch Eckenradius [mm]: Eckenradius des Lochs bei Rechteck/Dreieck.
+
+[b]  ; Seite B (Ende)
+b_kind       = rechteck     ; Form: Grundform des Querschnitts: Rechteck oder Dreieck (Grundseite unten, Spitze oben) mit Eckenradius, Kreis (Breite = Hoehe) oder Ellipse.
+b_w          = 60           ; Breite X [mm]: Breite in X (vorn-hinten).
+b_h          = 40           ; Hoehe Y [mm]: Hoehe in Y. Beim Kreis wird die Breite genommen.
+b_r          = 8            ; Eckenradius [mm]: Eckenradius bei Rechteck/Dreieck; 0 = scharfe Ecken, bei Kreis/Ellipse ohne Wirkung.
+b_dx         = 0            ; Versatz X [mm]: Mittelpunkt dieser Seite gegenueber Seite A in X (positiv = nach vorn).
+b_dy         = 0            ; Versatz Y [mm]: Mittelpunkt dieser Seite gegenueber Seite A in Y (positiv = nach oben).
+b_hole       = keine        ; Loch: Loch in der Mitte fuer einen Ring, gleiche Formen wie aussen. Der Draht schneidet aussen herum, dann durch einen Schlitz hinten zum Loch, das Loch, und wieder hinaus. Beide Seiten brauchen ein Loch oder keines.
+b_hole_w     = 20           ; Loch Breite X [mm]: Breite des Lochs in X.
+b_hole_h     = 20           ; Loch Hoehe Y [mm]: Hoehe des Lochs in Y (Kreis: Breite).
+b_hole_r     = 0            ; Loch Eckenradius [mm]: Eckenradius des Lochs bei Rechteck/Dreieck.
+
+[lage]  ; Lage im Schneider
+root_gap     = 150          ; Seite A ab Turm [mm]: Abstand der Seite A des Blocks vom Turm mit dem festen Draht, entlang des Drahts.
+block_x      = 20           ; Block Rueckseite X [mm]: Abstand der Blockrueckseite vom Referenzpunkt nach vorn. Dort taucht der Draht ein.
+table_y      = 20           ; Tischoberkante Y [mm]: Hoehe der Tischoberkante (= Blockunterkante) ueber dem Draht-Null. Die Form liegt 'Rand' darueber.
+lead         = 12           ; Einlauf [mm]: Strecke im Schaum von der Blockrueckseite bis zum hintersten Punkt der Form.
+
+[schnitt]  ; Schnitt
+feed         = 200          ; Drahtvorschub [mm/min]: Geschwindigkeit des Drahts im Schaum, bezogen auf die schnellere der beiden Seiten.
+wire         = 0            ; Heizleistung S [1..255]: PWM-Stufe des Heizdrahts. 0 = Wert vom Schieber im Hauptfenster uebernehmen.
+warmup       = 3            ; Aufheizen [s]: Wartezeit nach dem Einschalten des Drahts.
+kerf         = 1.0          ; Schnittbreite [mm]: Breite des Schmelzkanals. Aussen laeuft der Pfad die Haelfte davon ausserhalb, im Loch innerhalb.
+margin       = 10           ; Rand [mm]: Mindestabstand der Form zu Vorderseite, Ober-, Unterseite und Seite B des Blocks.
+
+[block]  ; Block
+block_s      =              ; Block Anfang ab Seite A [mm]: 0 oder leer = der Block beginnt an Seite A.
+block_w      =              ; Block Breite [mm]: Ausdehnung in Spannrichtung. Leer = Laenge plus Rand.
+block_len    =              ; Block Laenge [mm]: Leer = Mindestblock.
+block_y      =              ; Block Unterkante Y [mm]: Leer = Mindestblock.
+block_h      =              ; Block Hoehe [mm]: Leer = Mindestblock.

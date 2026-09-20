@@ -1,0 +1,10 @@
+firmware/grbl5x/vendor/
+firmware/hwtest/.pio/
+__pycache__/
+*.pyc
+.pytest_cache/
+Marlin/
+motor_test/build/
+firmware/endstop_test/.pio/
+config/ui_state.json
+*.png

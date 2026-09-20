@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8">
+<title>Auftrieb bei flachem Flügel</title>
+<style>
+body{font-family:sans-serif;max-width:900px;margin:2em auto;padding:0 1em;line-height:1.45;color:#222}
+section{margin:1.2em 0;padding:.6em 1.2em;border-radius:8px}
+section.user{background:#e8f0fe}
+section.assistant{background:#f6f6f6}
+section h4{margin:0 0 .4em;font-size:.85em;color:#666;font-weight:normal}
+section h1{font-size:1.3em}section h2{font-size:1.15em}section h3{font-size:1.05em}
+table{border-collapse:collapse;margin:.6em 0}
+td,th{border:1px solid #ccc;padding:.2em .6em;text-align:left;vertical-align:top}
+pre{background:#eee;padding:.6em;overflow-x:auto;border-radius:4px}
+code{background:#eee;padding:0 .2em;border-radius:3px}
+pre code{background:none;padding:0}
+blockquote{border-left:3px solid #bbb;margin:.6em 0;padding:.1em .8em;color:#444}
+hr{border:0;border-top:1px solid #ddd;margin:1em 0}
+.math{font-family:monospace;color:#333}
+nav a{margin-right:1em}
+</style>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+ onload="renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false});"></script>
+
+</head><body>
+<nav><a href="index.html">← Übersicht</a></nav>
+<h1>Auftrieb bei flachem Flügel</h1>
+<p><small>ChatGPT-Projekt „Flugzeugbaukasten“ · 27.03.2026 13:09 bis 27.03.2026 13:09 · 2 Beiträge · <a href="https://chatgpt.com/g/g-p-69c3ebacd09081919d16054124f6bb4c-flugzeugbaukasten/c/69c6734a-c964-8325-be01-ec53b7c8d29f">Quelle</a> · exportiert 2026-09-17</small></p>
+<section class="user"><h4>Valentin · 27.03.2026 13:09</h4>
+<p>warum entsteht auftriebskraft bei absolut flachem flügel mit einem Anstellwinkel?</p>
+</section>
+<section class="assistant"><h4>ChatGPT · 27.03.2026 13:09</h4>
+<p>Ah, das ist ein klassisches Aerodynamik-Thema! Auch ein <strong>absolut flacher Flügel</strong> erzeugt <strong>Auftrieb</strong>, wenn er einen <strong>Anstellwinkel</strong> (\alpha) zur Luftströmung hat. Lass uns Schritt für Schritt schauen, <strong>warum</strong> das so ist:</p>
+<hr>
+<h3>1. Grundidee: Luft muss "um den Flügel herum"</h3>
+<ul>
+<li>Stell dir vor, ein <strong>flacher Flügel</strong> bewegt sich durch die Luft.</li>
+<li>Wenn er <strong>parallel zur Luftströmung</strong> ist ((\alpha = 0°)), wird die Luft <strong>kaum abgelenkt</strong>. Der Auftrieb ist minimal.</li>
+<li>Sobald der Flügel einen <strong>Anstellwinkel (\alpha &gt; 0)</strong> bekommt, trifft die Luft den Flügel nicht mehr frontal, sondern <strong>schräg</strong>.</li>
+</ul>
+<hr>
+<h3>2. Umlenkung der Strömung erzeugt Kraft</h3>
+<ul>
+<li>Die Luft wird durch den Flügel <strong>nach unten abgelenkt</strong>.</li>
+<li>Nach dem <strong>3. Newtonschen Gesetz</strong>: jede Aktion hat eine gleich große Gegenreaktion → die nach unten beschleunigte Luft erzeugt eine <strong>nach oben gerichtete Kraft</strong>: den <strong>Auftrieb</strong>.</li>
+</ul>
+<p>Formelmäßig lässt sich das über die <strong>Kraftvektorzerlegung</strong> ausdrücken:</p>
+<p>[
+F_\text{Gesamt} \approx \frac{1}{2} \rho v^2 S C_L
+]</p>
+<ul>
+<li>(\rho) = Luftdichte</li>
+<li>(v) = Anströmgeschwindigkeit</li>
+<li>(S) = Flügelfläche</li>
+<li>(C_L) = Auftriebsbeiwert → steigt bei flachem Flügel <strong>mit Anstellwinkel (\alpha))</strong></li>
+</ul>
+<p>Für einen flachen Flügel ohne Profil gilt in der Näherung:</p>
+<p>[
+C_L \approx 2 \pi \alpha \quad \text{(für kleine Winkel, (\alpha) in Radiant)}
+]</p>
+<hr>
+<h3>3. Kräfte-Vektor-Skizze</h3>
+<p>Stell dir den Flügel als Rechteck vor:</p>
+<ul>
+<li><strong>Relativer Luftstrom</strong> → horizontal von links</li>
+<li><strong>Anstellwinkel (\alpha)</strong> → Flügel leicht nach oben geneigt</li>
+<li><strong>Luftkraft auf Flügel</strong> → wirkt <strong>senkrecht auf die Flügeloberfläche</strong></li>
+<li>Zerlegung:</li>
+<li><strong>Auftrieb</strong> (L = F \cdot \cos(\alpha)) nach oben</li>
+<li><strong>Widerstand</strong> (D = F \cdot \sin(\alpha)) nach hinten</li>
+</ul>
+<p>Also: <strong>Auftrieb entsteht allein durch den Winkel der Fläche</strong>, nicht unbedingt durch ein spezielles Profil.</p>
+<hr>
+<h3>4. Intuition</h3>
+<ul>
+<li>Flügel ohne Profil = keine "Camber" → kein Auftrieb bei (\alpha = 0)</li>
+<li>Flügel <strong>mit Anstellwinkel</strong> → Luft wird nach unten abgelenkt → Auftrieb</li>
+<li>Das ist genau die physikalische Grundlage für <strong>Düsenflugzeuge mit flachen Tragflächen</strong>, leichte Segelflieger oder Papierflieger.</li>
+</ul>
+<hr>
+<p>Wenn du willst, kann ich eine <strong>einfache Skizze mit Vektoren</strong> für dich machen, die zeigt, wie die <strong>Kraft vom Anstellwinkel abhängt</strong>, damit man es sofort sieht.</p>
+<p>Willst du, dass ich das mache?</p>
+</section>
+</body></html>
