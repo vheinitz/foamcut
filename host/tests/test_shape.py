@@ -88,5 +88,5 @@ def test_shape_gcode_is_valid_and_returns_to_the_entry():
     code, path = sh.generate(spec(a_hole="rechteck", b_hole="rechteck"), machine())
     prog = gc.Program.parse(code)
     assert not prog.errors and code.startswith("; foamcut shape: A rechteck")
-    g1 = [l for l in code.splitlines() if l.startswith("G1 ")]
-    assert f"X{path.entry_t1[0]:.3f}" in g1[-1] and sh.shape_name(spec(a_hole="kreis")).endswith("_ring.nc")
+    g1 = [l for l in code.splitlines() if l.startswith("G1 ") and "F" in l and "G94" not in l]
+    assert f"X{path.entry_t1[0]:.3f}" in g1[-2]      # last cut segment; g1[-1] is the hot retreat to X0/U0 and sh.shape_name(spec(a_hole="kreis")).endswith("_ring.nc")
