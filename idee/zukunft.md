@@ -97,6 +97,12 @@ Einschätzung (Claude, 2026-09-21):
   bloß kleiner. Für die Baukastenflügel eher Papier/Folie als Haut
   (distilled.md §5) statt Verglasung.
 
+Messung 2026-09-22 (Valentin, Draht 15 Ω/m an 12 V, HEATER_1): 100 mm/min
+statt 300 macht die Oberfläche **nicht** glatter, „eher rauer. Besser schnell
+mit viel Power.“ Die Einschätzung oben („langsam+heiß = verglaste Haut“)
+gilt für diesen Schaum/Draht also nicht; die Idee „langsam für glatt“ ist
+damit vom Tisch. Was bleibt: Haltestege für Formen mit Loch.
+
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.
 - Winde mit Drehzahlregelung für reproduzierbare Rampenstarts.
