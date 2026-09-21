@@ -641,8 +641,8 @@ def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: li
         prev_r, prev_t = pr, pt
     out += [
         "G94",
-        "M5 ; Draht aus",
-        "G0 X0 U0 ; zurueck, ueber dem Tisch",
+        "G0 X0 U0 ; zurueck ueber dem Tisch - Draht bleibt heiss, falls der Block weiter hinten liegt als gedacht",
+        "M5 ; Draht aus, erst bei X0/U0",
         "G0 Y0 V0 ; dann senken",
         "M2",
     ]

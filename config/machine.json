@@ -6,9 +6,9 @@
     "feed": 40.0,
     "home_mpos": {
       "U": -218.0,
-      "V": -130.0,
+      "V": -128.0,
       "X": -218.0,
-      "Y": -130.0
+      "Y": -128.0
     },
     "invert_switch": true,
     "length_mm": {
@@ -56,6 +56,7 @@
     "X": 218.0,
     "Y": 128.0
   },
+  "warmup_s": 3.0,
   "wire_fixed_tower": 2,
-  "wire_power": 0
+  "wire_power": 30
 }

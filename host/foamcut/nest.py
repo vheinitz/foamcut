@@ -293,7 +293,8 @@ def emit(nest: Nest, feed: float, wire: int, warmup: float) -> str:
             out.append(f"G1 {_w(t1, t2)} F{1.0 / minutes:.4f}")
             prev = (pr, pt)
         out.append("G94")
-    out += ["M5 ; Draht aus", "G0 X0 U0 ; zurueck, ueber dem Tisch", "G0 Y0 V0 ; dann senken", "M2"]
+    out += ["G0 X0 U0 ; zurueck ueber dem Tisch - Draht bleibt heiss (Block evtl. weiter hinten)",
+           "M5 ; Draht aus, erst bei X0/U0", "G0 Y0 V0 ; dann senken", "M2"]
     nest.notes.append(f"Schnittzeit ca. {total_min:.1f} min")
     return "\n".join(out) + "\n"
 
