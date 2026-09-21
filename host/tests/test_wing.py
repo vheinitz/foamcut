@@ -338,6 +338,8 @@ def test_rapids_lift_before_moving_over_the_table():
     assert g0[0].startswith("G0 Y") and "X" not in g0[0].split(";")[0]
     assert g0[1].startswith("G0 X") and "Y" not in g0[1].split(";")[0]
     assert g0[-2].startswith("G0 X0 U0") and g0[-1].startswith("G0 Y0 V0")
+    tail = [l.split(";")[0].strip() for l in code.splitlines() if l.split(";")[0].strip()][-4:]
+    assert tail == ["G0 X0 U0", "M5", "G0 Y0 V0", "M2"]      # wire off only once the carriages are back
 
 
 def test_extrapolation_is_linear_in_span():
