@@ -36,6 +36,12 @@ Stand 2026-09-17. Nur Ideen zum Festhalten; Reihenfolge ohne Priorität.
   SVG/DXF, Nadel-Ein/Austauchen als Z-Ersatz (Vorschub-Pause/Draht aus).
 - Firmware bleibt unverändert; nur Host-Seite.
 
+## Steuerung ohne Rechner
+- WLAN-fähiger Controller am GT2560 (ESP32 als seriell-WLAN-Brücke, sonst
+  Raspberry Pi mit dem Host), damit die Maschine draußen ohne angeschlossenen
+  Laptop läuft; Programme per Browser/Handy übertragen und starten.
+  Idee vom 2026-09-21 (Valentin), noch nicht bewertet.
+
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.
 - Winde mit Drehzahlregelung für reproduzierbare Rampenstarts.

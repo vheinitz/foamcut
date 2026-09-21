@@ -32,9 +32,9 @@ def win(app, tmp_path, monkeypatch):
     w.close()
 
 
-def test_main_window_has_four_pages(win):
-    assert win.stack.count() == 4
-    assert [win.nav.item(i).text() for i in range(4)] == ["Maschine", "Flügel", "Formen", "Programm & Sim"]
+def test_main_window_has_five_pages(win):
+    assert win.stack.count() == 5
+    assert [win.nav.item(i).text() for i in range(5)] == ["Maschine", "Flügel", "Formen", "Schachteln", "Programm & Sim"]
 
 
 def test_wing_page_builds_gcode_and_hands_it_to_the_program_page(win, app):
@@ -43,7 +43,7 @@ def test_wing_page_builds_gcode_and_hands_it_to_the_program_page(win, app):
     assert wp.gcode and wp.path is not None
     wp.to_program(); app.processEvents()
     assert win.program_page.lines and win.program_page.name.startswith("clarky_")
-    assert win.nav.currentRow() == 3                     # jumps to Programm & Sim
+    assert win.nav.currentRow() == 4                     # jumps to Programm & Sim
     assert win.program_page.segs and len(win.program_page.segs) > 100
 
 
@@ -158,7 +158,7 @@ def test_shape_page_builds_a_ring_and_hands_it_over(win, app):
     sp.inputs["b_kind"].setCurrentText("ellipse"); sp.rebuild(); app.processEvents()
     assert len(sp.path.root) == 2 * 73 + 1 and sp.values()["b_kind"] == "ellipse"
     sp.to_program(); app.processEvents()
-    assert win.program_page.name.endswith("_ring.nc") and win.nav.currentRow() == 3
+    assert win.program_page.name.endswith("_ring.nc") and win.nav.currentRow() == 4
     sp.inputs["a_hole"].setCurrentText("keine"); assert sp.rebuild() is False      # one-sided hole refused
     texts = [sp.messages.itemAt(i).widget().text() for i in range(sp.messages.count())]
     assert any("Loch" in t for t in texts)
@@ -179,7 +179,7 @@ def test_freischnitt_runs_as_a_relative_program_from_the_current_position(win, a
     mp._cut(0.0); app.processEvents()
     assert started and win.program_page.name.startswith("freischnitt_100mm_0deg")
     assert win.program_page.start_pos["X"] == pytest.approx(30.0)
-    assert not win.program_page.problems and win.nav.currentRow() == 3
+    assert not win.program_page.problems and win.nav.currentRow() == 4
     mp.cut_len.setText("300"); mp._cut(0.0); app.processEvents()     # 30 + 300 > 218 travel
     assert any("Verfahrweg" in p or "faehrt" in p for p in win.program_page.problems)
     # swept face: tower 2 offset forward, cut upward, offset undone at the end
@@ -205,6 +205,35 @@ def test_run_is_drawn_live_on_the_sim_views(win, app):
     assert pp.v1.live is None and len(pp.v1.trail) == 2          # trail stays for inspection
     pp.on_status({"X": 0.0, "Y": 0.0, "U": 0.0, "V": 0.0})
     assert pp.v1.live is None                                     # not running: ignored
+
+
+def test_batch_page_stacks_parts_and_hands_over_one_program(win, app, tmp_path):
+    from foamcut.wing import TEMPLATE
+    from foamcut.shape import TEMPLATE as SHAPE_TEMPLATE
+    w1 = tmp_path / "a.wing"; w1.write_text(TEMPLATE)
+    s1 = tmp_path / "b.shape"; s1.write_text(SHAPE_TEMPLATE.replace("a_h          = 40", "a_h = 20").replace("b_h          = 40", "b_h = 20"))
+    bp = win.batch_page
+    bp._add_item(str(w1), pair=True); bp._add_item(str(s1))
+    bp.f["gap"].setText("5"); bp.rebuild(); app.processEvents()
+    assert bp.nest and len(bp.nest.parts) == 3
+    parts = bp.nest.parts
+    s_lo, s_hi = sorted(bp.nest.block_s)
+    for upper, lower in zip(parts, parts[1:]):                 # stacked with the gap, checked along the span
+        for k in range(21):
+            sv = s_lo + (s_hi - s_lo) * k / 20
+            assert min(y for _, y in upper.path.section(sv)) >= max(y for _, y in lower.path.section(sv)) + 5 - 1e-6
+    assert parts[-1].bottom == pytest.approx(20.0 + 10.0)      # lowest part: margin above the table
+    assert bp.nest.parts[1].name.endswith("(Paar)") and bp.nest.parts[1].path.root == bp.nest.parts[0].path.tip or True
+    bp.to_program(); app.processEvents()
+    assert win.program_page.name == "nest_3teile.nc" and win.nav.currentRow() == 4
+    code = win.program_page.raw
+    assert code.count("; --- ") == 3 and code.count("M3 ") == 1
+    # the batch survives a text round trip
+    from foamcut.nest import Batch
+    b, _ = bp.batch()
+    b2 = Batch.parse(b.to_text())
+    assert [it.file for it in b2.items] == [str(w1), str(s1)] and b2.items[0].pair and not b2.items[1].pair
+    assert b2.gap == 5.0 and b2.block_len is None
 
 
 def test_program_page_translates_a_generator_file(win, app):

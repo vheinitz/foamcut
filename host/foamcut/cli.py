@@ -420,6 +420,39 @@ def cmd_shape(args) -> int:
     return _cmd_design(args, SHAPE_MODEL, "shape")
 
 
+def cmd_nest(args) -> int:
+    """Several parts in one block from a .batch list -> one program."""
+    from . import nest as ns
+    from .wing import WingError
+    if args.template:
+        sys.stdout.write(ns.Batch(items=[ns.Item("mein.wing", True), ns.Item("rumpf.shape")]).to_text())
+        return 0
+    if not args.batch:
+        print("foamcut nest LISTE.batch -o OUT.nc   oder   foamcut nest --template > liste.batch", file=sys.stderr)
+        return 2
+    m = Machine.load_or_none(Path(args.machine)) or Machine()
+    try:
+        batch = ns.Batch.parse(Path(args.batch).read_text(), Path(args.batch).parent)
+        code, nest = ns.generate(batch, m, Path(args.airfoils), feed=args.feed or m.cut_feed)
+    except (WingError, OSError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    for n in nest.notes:
+        print(f"  {n}")
+    ext = nest.extents()
+    print("  Schlittenweg: " + "  ".join(f"{a} {lo:.1f}..{hi:.1f}" for a, (lo, hi) in ext.items()))
+    problems = m.check_extents(ext) if m.has_travel() else []
+    for pr in problems:
+        print(f"  VERFAHRWEG: {pr}")
+    prog = gc.Program.parse(code)
+    for e in prog.errors:
+        print(f"  ERROR: {e}")
+    out = Path(args.out) if args.out else Path(args.batch).with_suffix(".nc")
+    out.write_text(code)
+    print(f"geschrieben: {out}")
+    return 1 if (problems or prog.errors) else 0
+
+
 def _cmd_design(args, model, cmd: str) -> int:
     from .wing import WingError
     if args.template:
@@ -725,6 +758,14 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--airfoils", default="airfoil", help=argparse.SUPPRESS)
     c.add_argument("--template", action="store_true", help="print a spec template")
     c.set_defaults(func=cmd_shape)
+
+    c = sub.add_parser("nest", help="several saved parts stacked in one block -> one program")
+    c.add_argument("batch", nargs="?", help=".batch list (foamcut nest --template)")
+    c.add_argument("-o", "--out")
+    c.add_argument("--feed", type=float, help="mm/min for all parts (default: machine cut_feed)")
+    c.add_argument("--airfoils", default="airfoil", help=argparse.SUPPRESS)
+    c.add_argument("--template", action="store_true")
+    c.set_defaults(func=cmd_nest)
 
     c = sub.add_parser("sim", help="draw both carriage paths of a program, turtle-style")
     c.add_argument("file")

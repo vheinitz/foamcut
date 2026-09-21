@@ -70,6 +70,18 @@ oder Ring – Rumpfsegmente), **Programm & Sim** (laden/umsetzen,
 Turtle-Simulation beider Schlittenwege, Start/Pause/Stop). Beim Verbinden
 gleicht die GUI alle grbl-Settings mit `config/` ab.
 
+**Schachteln (mehrere Teile in einem Block):** Seite „Schachteln“ oder
+`foamcut nest LISTE.batch`. Gespeicherte `.wing`/`.shape` in die Liste laden,
+Reihenfolge = Schnittreihenfolge von oben nach unten (das letzte Teil liegt
+auf dem Tisch). Die Teile werden in Y gestapelt, Abstand „gap“ dazwischen –
+geprüft über die ganze Blockbreite, weil der Draht bei kürzeren Teilen hinter
+deren Ende weiterschneidet. Haken „Paar“ an einem Flügel: zusätzlich das
+Spiegelbild (in Spannrichtung umgedreht, Wurzel am Gewichtsturm) darüber,
+dünnes Ende über dickem. Zwischen den Teilen fährt der Draht 5 mm hinter der
+Blockrückseite (kein Schaum) senkrecht zum nächsten Einlauf, nie über
+Geschnittenes. Ein Programm, ein `M3`. Die Liste lässt sich als `.batch`
+speichern (`config/beispiel.batch`).
+
 **Lauf live:** Während ein Programm läuft, zeigen die beiden Ansichten auf
 „Programm & Sim“ die echte Position (rotes Fadenkreuz mit Koordinaten, aus den
 Statusmeldungen 5×/s) und die tatsächlich gefahrene Spur (rosé); die geplante

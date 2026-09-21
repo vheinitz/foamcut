@@ -98,6 +98,9 @@ foamcut shape SPEC.shape    free shape in one pass: rounded rectangle / triangle
                        circle / ellipse on each side, disc or ring (slit at the
                        rear), same placement as wings (GUI page "Formen";
                        foamcut shape --template)
+foamcut nest LIST.batch     several saved parts stacked in one block, one program
+                       (GUI page "Schachteln"; pairs: mirror-image panel nested
+                       thin-over-thick; wire travels behind the block face)
 foamcut gen square|taper|bounce
 foamcut selftest            move every axis out and back, verify it came home
 foamcut settings dump|apply

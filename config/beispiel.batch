@@ -1,0 +1,14 @@
+; foamcut batch - mehrere Teile in einem Block, von oben nach unten geschnitten
+
+[block]
+block_x = 20
+table_y = 20
+root_gap = 150
+gap = 8
+block_len = 
+block_h = 
+block_w = 
+
+[teile]
+teil = ../gcode/120_50.wing ; paar
+teil = beispiel.shape

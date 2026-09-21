@@ -17,6 +17,7 @@ from .machinepage import MachinePage
 from .programpage import ProgramPage
 from .state import UiState
 from .wingpage import DesignPage
+from .batchpage import BatchPage
 from ..shape import SHAPE_MODEL
 
 
@@ -41,6 +42,7 @@ class MainWindow(QMainWindow):
         self.machine_page.port.setText(port)
         self.wing_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log)
         self.shape_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log, model=SHAPE_MODEL)
+        self.batch_page = BatchPage(self.machine, Path("airfoil"), self.state, self.log)
         self.program_page = ProgramPage(self.machine, self.state, lambda: self.machine_page.power.value(), self.log)
 
         self.nav = QListWidget(); self.nav.setFixedWidth(190)
@@ -49,7 +51,7 @@ class MainWindow(QMainWindow):
                                "QListWidget::item{padding:10px 8px;} QListWidget::item:selected{background:#2f4370; color:white;}")
         self.stack = QStackedWidget()
         for title, page in (("Maschine", self.machine_page), ("Flügel", self.wing_page), ("Formen", self.shape_page),
-                            ("Programm & Sim", self.program_page)):
+                            ("Schachteln", self.batch_page), ("Programm & Sim", self.program_page)):
             self.nav.addItem(title); self.stack.addWidget(page)
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav.setCurrentRow(self.state.get("page", 0))
@@ -71,9 +73,9 @@ class MainWindow(QMainWindow):
         self.machine_page.connect_toggle.connect(self.toggle_connection)
         self.machine_page.home_requested.connect(lambda: self.worker and self.worker.submit("home"))
         self.machine_page.homing_dialog.connect(self.open_homing)
-        for page in (self.wing_page, self.shape_page):
+        for page in (self.wing_page, self.shape_page, self.batch_page):
             page.gcode_ready.connect(self.program_page.set_program)
-            page.gcode_ready.connect(lambda *_: self.nav.setCurrentRow(3))
+            page.gcode_ready.connect(lambda *_: self.nav.setCurrentRow(4))
         self.program_page.start_requested.connect(self.start_program)
         self.program_page.pause_requested.connect(lambda p: self.send_raw(b"!" if p else b"~"))
         self.program_page.stop_requested.connect(self.stop_program)
@@ -101,7 +103,7 @@ class MainWindow(QMainWindow):
         code = straight_cut(length, angle, feed, warmup=3.0, back=back, skew=(du, dv))
         name = f"freischnitt_{length:g}mm_{angle:g}deg" + (f"_u{du:g}v{dv:g}" if (du or dv) else "") + ".nc"
         self.program_page.set_program(code, name, start_pos=self.wpos())
-        self.nav.setCurrentRow(3)
+        self.nav.setCurrentRow(4)
         if self.program_page.prepare():
             self.program_page.start()
         else:

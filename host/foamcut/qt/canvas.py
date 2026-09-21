@@ -140,12 +140,16 @@ class FrontView(MmCanvas):
         super().__init__("Vorderansicht   X vorne →   Y oben ↑", parent)
         self.path = None
         self.machine = None
+        self.extra = []
 
-    def show_path(self, path, machine):
-        self.path, self.machine = path, machine
+    def show_path(self, path, machine, extra=()):
+        """`extra`: further WingPaths (nesting) drawn in the same colours, thinner."""
+        self.path, self.machine, self.extra = path, machine, list(extra)
         if path:
             bx, by, bl, bh = path.block
             pts = path.root + path.tip + path.tower1 + path.tower2 + [(0, 0), (bx, by), (bx + bl, by + bh)]
+            for q in self.extra:
+                pts += q.root + q.tip + q.tower1 + q.tower2
             if machine.has_travel():
                 pts += [(machine.travel_mm["X"], machine.travel_mm["Y"]), (machine.travel_mm["U"], machine.travel_mm["V"])]
             self.set_box(min(q[0] for q in pts), max(q[0] for q in pts), min(q[1] for q in pts), max(q[1] for q in pts))
@@ -171,6 +175,18 @@ class FrontView(MmCanvas):
             self.polyline(p, path.tower1, C["t1"], 1, dash=True)
         if on("t2"):
             self.polyline(p, path.tower2, C["t2"], 1, dash=True)
+        for q in getattr(self, "extra", []):
+            if on("t1"):
+                self.polyline(p, q.tower1, C["t1"], 1, dash=True)
+            if on("t2"):
+                self.polyline(p, q.tower2, C["t2"], 1, dash=True)
+            if on("root"):
+                self.polyline(p, q.root, C["root"], 2)
+            if on("tip"):
+                self.polyline(p, q.tip, C["tip"], 2)
+            if on("entry"):
+                p.setPen(QPen(C["entry"], 2)); p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawEllipse(self.tr(*q.entry_t1), 4, 4)
         if on("root"):
             self.polyline(p, path.root, C["root"], 2)
         if on("tip"):
