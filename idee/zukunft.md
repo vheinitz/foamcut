@@ -42,6 +42,61 @@ Stand 2026-09-17. Nur Ideen zum Festhalten; Reihenfolge ohne Priorität.
   Laptop läuft; Programme per Browser/Handy übertragen und starten.
   Idee vom 2026-09-21 (Valentin), noch nicht bewertet.
 
+## Schnittbreite abhängig von Geschwindigkeit (und Leistung, Schaum, Temperatur)
+Idee vom 2026-09-21 (Valentin): „Wenn man die Kalibrierung mit einem
+Styroportyp vorm Schneiden macht, mit unterschiedlicher Geschwindigkeit
+schneidet und dann die Schnitte misst, kann man die Parameter approximiert
+anwenden und in Erzeugung von G-Code berücksichtigen … da wo eine Seite viel
+kleiner, fährt der Draht viel langsamer und Schnitt wird noch größer → Teilende
+kleiner.“
+
+Einschätzung (Claude, 2026-09-21):
+- Physik: Kanalbreite wächst mit der Energie je Weg, grob `kerf ≈ a + b·P/v`.
+  Beim Trapezflügel läuft die Endseite mit `v_tip = v_root · c_tip/c_root`
+  (gleiche Zeit, kürzerer Umfang). Bei λ = 0,6 bekommt das Ende 1,67× Energie
+  je mm; aus 1,0 mm Kerf werden dort erfahrungsgemäß eher 1,4–1,6 mm.
+- Wirkung am JuFo-Flügel (Tiefe 160 mm, Dicke 10 % = 16 mm): Tiefe −0,5 mm
+  (0,3 %, egal), Dicke −0,5 mm (3 %) – spürbar erst bei dünnen Profilen
+  (≤ 8 %) oder starker Zuspitzung (λ < 0,5); dort wird auch die Endleiste
+  fragil. Für Rechteckflügel und Formen mit gleich großen Seiten: nichts.
+- Profis: ja, das gibt es. GMFC (Gilles Muller) rechnet den Kerf je Seite aus
+  einer gemessenen Kerf-über-Geschwindigkeit-Tabelle; Jedicut hat Kerf je
+  Seite; Industriemaschinen regeln eher den Drahtstrom mit der Bahngeschwindigkeit
+  (konstante Energie je Weg). Letzteres hilft hier nicht: ein Draht, zwei
+  Geschwindigkeiten – Leistung je Seite lässt sich nicht trennen, also bleibt
+  nur die Geometriekorrektur je Seite.
+- Umsetzung in foamcut ist klein: `_profile_mm()` nimmt den Kerf schon je
+  Profil; nötig sind (1) Kalibrierschnitt: 2–3 gerade Schnitte bei v1, v2, v3
+  (Freischnitt), Breiten messen, als `kerf_table` in machine.json, (2) im
+  Generator Kerf je Seite aus `v_seite` interpoliert (linear in 1/v), (3) der
+  Freischnitt-Dialog bekommt „Kalibrierung“. Grbl-seitig nichts.
+- Empfehlung: erst machen, wenn ein Flügel mit λ < 0,6 oder ein dünnes
+  Leitwerk gebraucht wird; bis dahin genügt der eine Kerf vom Maschinenblatt,
+  gemessen bei der üblichen Geschwindigkeit.
+
+## Langsam schneiden für glatte Oberfläche
+Idee vom 2026-09-21 (Valentin): absichtlich langsamer fahren, damit die
+Oberfläche länger schmilzt und glatter wird; G-Code soll das berücksichtigen
+(größer schneiden) und Stege stehen lassen, damit das Teil nicht gleich absinkt.
+
+Einschätzung (Claude, 2026-09-21):
+- Begriff: Stehenbleibende Brücken heißen beim Schneiden „Haltestege“ (engl.
+  tabs/bridges, wie beim Lasern); „Stützstrukturen“ sind 3D-Druck-Supports.
+- Glatt wird XPS (Styrodur) durch langsam+heiß tatsächlich (verglaste Haut);
+  EPS (Styropor) wird eher grubig, weil die Kugeln unterschiedlich schmelzen.
+  Kosten: größerer Kerf, dünne Endleiste schmilzt weg, mehr Drahtdurchhang.
+  „Größer schneiden“ ist dabei kein eigenes Feature, sondern genau der Kerf
+  bei dieser Geschwindigkeit (siehe oben) – die Vorschubfelder gibt es schon.
+- Haltestege: beim Flügel unnötig – der Kern liegt bis zum Schluss auf dem
+  unteren Rest, der obere Rest liegt auf dem Kern, nichts fällt auf den Draht.
+  Nützlich bei Formen mit Loch (Innenstück fällt beim Schließen der Kontur)
+  und bei gestapelten Teilen. Umsetzung billig: Schließsegment um `steg` mm
+  verkürzen, Steg per Hand brechen; ein Feld in [schnitt] der Form.
+- Empfehlung: Haltesteg für Formen ja (klein); „langsam für glatt“ als
+  Einstellung nur mit dem kalibrierten Kerf sinnvoll, sonst wird das Teil
+  bloß kleiner. Für die Baukastenflügel eher Papier/Folie als Haut
+  (distilled.md §5) statt Verglasung.
+
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.
 - Winde mit Drehzahlregelung für reproduzierbare Rampenstarts.

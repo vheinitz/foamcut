@@ -381,12 +381,18 @@ def cmd_machine(args) -> int:
             m.tower_gap_measured = True
         if args.wire_fixed is not None:
             m.wire_fixed_tower = args.wire_fixed
+        if args.kerf is not None:
+            if args.kerf < 0:
+                print("error: kerf muss >= 0 sein", file=sys.stderr)
+                return 2
+            m.kerf_mm = args.kerf
         m.save(path)
         print(f"gespeichert: {path}")
     print(f"Turmabstand (Drahtaufhaengungen): {m.tower_gap_mm:g} mm"
           + ("" if m.tower_gap_measured else "   <- NICHT gemessen, Platzhalter"))
     print(f"Draht fest an Turm {m.wire_fixed_tower} ({'X/Y' if m.wire_fixed_tower == 1 else 'U/V'}), "
           "dort liegt die Fluegelwurzel")
+    print(f"Schnittbreite (Kerf): {m.kerf_mm:g} mm")
     print("Schritte/mm:", "  ".join(f"{a} {m.steps_per_mm[a]:g}" for a in AXES))
     print("Max mm/min: ", "  ".join(f"{a} {m.max_rate[a]:g}" for a in AXES))
     print("Verfahrweg: ", "  ".join(f"{a} {m.travel_mm[a]:g}" for a in AXES))
@@ -740,6 +746,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Abstand der beiden Drahtaufhaengungen in mm (messen!)")
     c.add_argument("--wire-fixed", type=int, choices=(1, 2), dest="wire_fixed",
                    help="Turm, an dem der Draht fest eingespannt ist (1 = X/Y, 2 = U/V); Wurzelseite")
+    c.add_argument("--kerf", type=float, help="Schnittbreite in mm (Testschnitt messen); gilt fuer Fluegel, Formen, Stapel")
     c.set_defaults(func=cmd_machine)
 
     c = sub.add_parser("jogpad", help="keyboard jogging")

@@ -38,10 +38,11 @@ LEDNICER = """TEST LEDNICER
 """
 
 
-def machine(gap=800.0, travel=None, fixed=2):
+def machine(gap=800.0, travel=None, fixed=2, kerf=1.0):
     m = Machine()
     m.tower_gap_mm = gap
     m.wire_fixed_tower = fixed
+    m.kerf_mm = kerf
     if travel:
         m.travel_mm = travel
     return m
@@ -123,8 +124,8 @@ def test_panel_longer_than_tower_gap_is_refused():
 # ------------------------------------------------------------ geometry ----
 def test_profiles_sit_where_the_spec_says():
     """The block face is the anchor; the trailing edge sits `lead` in front of it."""
-    s = spec(root_chord=100.0, tip_chord=80.0, block_x=8.0, lead=12.0, chord_y=45.0, sweep=0.0, kerf=0.0)
-    p = build_path(s, machine(), AIRFOILS)
+    s = spec(root_chord=100.0, tip_chord=80.0, block_x=8.0, lead=12.0, chord_y=45.0, sweep=0.0)
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
     assert p.root[0] == pytest.approx((20.0, 45.0), abs=1e-6)          # TE at block_x + lead
     assert max(x for x, _ in p.root) == pytest.approx(120.0, abs=1e-6)  # LE at TE + chord
     assert max(x for x, _ in p.tip) == pytest.approx(120.0, abs=1e-6)   # LE aligned, no sweep
@@ -133,8 +134,8 @@ def test_profiles_sit_where_the_spec_says():
 
 
 def test_lead_moves_the_profile_not_the_block():
-    a = build_path(spec(lead=10.0, kerf=0.0), machine(), AIRFOILS)
-    b = build_path(spec(lead=25.0, kerf=0.0), machine(), AIRFOILS)
+    a = build_path(spec(lead=10.0), machine(kerf=0.0), AIRFOILS)
+    b = build_path(spec(lead=25.0), machine(kerf=0.0), AIRFOILS)
     assert a.block[0] == b.block[0] == a.entry_root[0]
     assert b.root[0][0] - a.root[0][0] == pytest.approx(15.0)
 
@@ -142,8 +143,8 @@ def test_lead_moves_the_profile_not_the_block():
 def test_rearmost_trailing_edge_gets_the_lead():
     """Tip TE further back than the root TE (strong sweep): the tip TE is the one
     `lead` in front of the face, the root TE further forward."""
-    s = spec(root_chord=100.0, tip_chord=80.0, sweep=40.0, block_x=8.0, lead=12.0, kerf=0.0)
-    p = build_path(s, machine(), AIRFOILS)
+    s = spec(root_chord=100.0, tip_chord=80.0, sweep=40.0, block_x=8.0, lead=12.0)
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
     assert min(x for x, _ in p.tip) == pytest.approx(20.0, abs=1e-6)
     assert min(x for x, _ in p.root) == pytest.approx(40.0, abs=1e-6)
 
@@ -156,8 +157,8 @@ def test_legacy_te_x_places_the_block_face_lead_behind_it():
 
 
 def test_min_block_wraps_the_cut_with_the_margins():
-    s = spec(kerf=0.0, margin=7.0)
-    p = build_path(s, machine(), AIRFOILS)
+    s = spec(margin=7.0)
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
     bx, by, bl, bh, start, width = p.min_block
     pts = p.faces[0][1] + p.faces[1][1]
     assert bx == s.block_x and start == 0 and width == pytest.approx(s.panel + 7.0)
@@ -170,29 +171,29 @@ def test_min_block_wraps_the_cut_with_the_margins():
 
 
 def test_sweep_moves_the_tip_back():
-    p = build_path(spec(sweep=10.0, kerf=0.0), machine(), AIRFOILS)
+    p = build_path(spec(sweep=10.0), machine(kerf=0.0), AIRFOILS)
     root_le = max(x for x, _ in p.root)
     assert max(x for x, _ in p.tip) == pytest.approx(root_le - 10.0, abs=1e-6)
 
 
 def test_washout_puts_the_tip_nose_down():
-    flat = build_path(spec(washout=0.0, kerf=0.0), machine(), AIRFOILS)
-    twisted = build_path(spec(washout=3.0, kerf=0.0), machine(), AIRFOILS)
+    flat = build_path(spec(washout=0.0), machine(kerf=0.0), AIRFOILS)
+    twisted = build_path(spec(washout=3.0), machine(kerf=0.0), AIRFOILS)
     i_le = len(flat.tip) // 2
     assert twisted.tip[i_le][1] < flat.tip[i_le][1]
 
 
 def test_kerf_widens_the_contour():
-    a = build_path(spec(kerf=0.0), machine(), AIRFOILS)
-    b = build_path(spec(kerf=2.0), machine(), AIRFOILS)
+    a = build_path(spec(), machine(kerf=0.0), AIRFOILS)
+    b = build_path(spec(), machine(kerf=2.0), AIRFOILS)
     i = len(a.root) // 4               # upper surface
     assert b.root[i][1] > a.root[i][1]
 
 
 def test_root_and_tip_at_the_towers_means_carriages_follow_the_profiles():
     """root_gap = 0 and panel = tower_gap: the carriage paths are the profiles."""
-    s = spec(root_gap=0.0, panel=800.0, kerf=0.0)
-    p = build_path(s, machine(gap=800.0, fixed=1), AIRFOILS)
+    s = spec(root_gap=0.0, panel=800.0)
+    p = build_path(s, machine(gap=800.0, fixed=1, kerf=0.0), AIRFOILS)
     for a, b in zip(p.tower1, p.root):
         assert a == pytest.approx(b, abs=1e-9)
     for a, b in zip(p.tower2, p.tip):
@@ -201,8 +202,8 @@ def test_root_and_tip_at_the_towers_means_carriages_follow_the_profiles():
 
 def test_root_sits_at_the_fixed_wire_tower():
     """The clamped wire end is the precise reference; the machine decides, not the wing."""
-    at1 = build_path(spec(kerf=0.0), machine(fixed=1), AIRFOILS)
-    at2 = build_path(spec(kerf=0.0), machine(fixed=2), AIRFOILS)
+    at1 = build_path(spec(), machine(fixed=1, kerf=0.0), AIRFOILS)
+    at2 = build_path(spec(), machine(fixed=2, kerf=0.0), AIRFOILS)
     assert at1.root_tower == 1 and at2.root_tower == 2
     assert at1.s_root == pytest.approx(at2.tower_gap - at2.s_root)
     for a, b in zip(at1.tower1, at2.tower2):
@@ -214,9 +215,9 @@ def test_mirror_flips_the_profiles_about_the_chord_line():
     """Mirrored = same span placement, profile upside down about its chord line
     (each version sits `margin` above the same table, so the chord heights differ).
     Turning the cut piece over yields the other-hand wing."""
-    plain = build_path(spec(kerf=0.0, washout=3.0), machine(), AIRFOILS)
-    sp = spec(kerf=0.0, washout=3.0); sp.mirror = True
-    mirr = build_path(sp, machine(), AIRFOILS)
+    plain = build_path(spec(washout=3.0), machine(kerf=0.0), AIRFOILS)
+    sp = spec(washout=3.0); sp.mirror = True
+    mirr = build_path(sp, machine(kerf=0.0), AIRFOILS)
     assert mirr.s_root == plain.s_root and mirr.mirrored
     assert mirr.table_y == plain.table_y == sp.table_y
     for a, b in zip(plain.root, mirr.root):
@@ -228,8 +229,8 @@ def test_mirror_flips_the_profiles_about_the_chord_line():
 
 
 def test_profile_sits_margin_above_the_table():
-    s = spec(kerf=0.0, table_y=17.0, margin=6.0)
-    p = build_path(s, machine(), AIRFOILS)
+    s = spec(table_y=17.0, margin=6.0)
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
     pts = p.faces[0][1] + p.faces[1][1]
     assert min(y for _, y in pts) == pytest.approx(23.0)
     assert p.block[1] == pytest.approx(17.0) and p.table_y == 17.0
@@ -237,8 +238,8 @@ def test_profile_sits_margin_above_the_table():
 
 
 def test_lowest_table_puts_the_carriages_at_zero():
-    s = spec(kerf=0.0, root_chord=120.0, tip_chord=50.0)      # taper: tower paths dip below the block
-    p = build_path(s, machine(), AIRFOILS)
+    s = spec(root_chord=120.0, tip_chord=50.0)      # taper: tower paths dip below the block
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
     s.table_y = p.table_range[0]
     q = build_path(s, machine(travel={"X": 220.0, "Y": 100.0, "U": 220.0, "V": 100.0}), AIRFOILS)
     assert min(y for _, y in q.tower1 + q.tower2) == pytest.approx(0.0, abs=1e-6)
@@ -253,11 +254,11 @@ def test_table_extent_stops_where_the_wire_dips_under_it():
     """Rectangular untwisted panel: the wire never goes lower than in the block,
     the table may run tower to tower. Tapered: beyond the tip the extrapolated
     lower surface sinks, the table must end before the tower."""
-    rect = build_path(spec(kerf=0.0, tip_chord=100.0, root_chord=100.0), machine(), AIRFOILS)
+    rect = build_path(spec(tip_chord=100.0, root_chord=100.0), machine(kerf=0.0), AIRFOILS)
     assert rect.table_max[0] == 0.0 and rect.table_max[1] == rect.tower_gap
     # strong taper: the wire lines cross at s~170 and the mirrored profile beyond
     # the apex reaches below the table height at tower 1
-    tap = build_path(spec(kerf=0.0, root_chord=120.0, tip_chord=20.0, margin=1.0), machine(), AIRFOILS)
+    tap = build_path(spec(root_chord=120.0, tip_chord=20.0, margin=1.0), machine(kerf=0.0), AIRFOILS)
     s_lo, s_hi, x_lo, x_hi = tap.table_max
     lo_b, hi_b = sorted(tap.block_s)
     assert s_lo <= lo_b and s_hi >= hi_b                 # always at least under the block
@@ -267,9 +268,9 @@ def test_table_extent_stops_where_the_wire_dips_under_it():
 
 
 def test_legacy_chord_y_gives_the_same_cut():
-    new = build_path(spec(kerf=0.0, table_y=20.0), machine(), AIRFOILS)
-    old = TEMPLATE.replace("table_y      = 20", f"chord_y = {new.chord_y:.6f}").replace("kerf         = 1.0", "kerf = 0")
-    p = build_path(WingSpec.parse(old), machine(), AIRFOILS)
+    new = build_path(spec(table_y=20.0), machine(kerf=0.0), AIRFOILS)
+    old = TEMPLATE.replace("table_y      = 20", f"chord_y = {new.chord_y:.6f}") + "kerf = 0.7\n"   # old files carry a kerf: ignored
+    p = build_path(WingSpec.parse(old), machine(kerf=0.0), AIRFOILS)
     assert p.table_y == pytest.approx(20.0, abs=1e-5)
     for a, b in zip(p.root + p.tip, new.root + new.tip):
         assert a == pytest.approx(b, abs=1e-5)
@@ -291,8 +292,8 @@ def test_area_and_taper_give_the_chords():
 
 def test_aileron_hinge_cut_goes_up_from_the_lower_surface():
     from foamcut.wing import AILERON_STEPS
-    plain = build_path(spec(kerf=1.0), machine(), AIRFOILS)
-    s = spec(kerf=1.0, aileron=25.0, hinge_skin=2.0, hinge_v=4.0)
+    plain = build_path(spec(), machine(kerf=1.0), AIRFOILS)
+    s = spec(aileron=25.0, hinge_skin=2.0, hinge_v=4.0)
     p = build_path(s, machine(), AIRFOILS)
     extra = 2 * AILERON_STEPS
     assert len(p.root) == len(plain.root) + extra and len(p.tip) == len(p.root)
@@ -312,7 +313,7 @@ def test_aileron_hinge_cut_goes_up_from_the_lower_surface():
 
 
 def test_block_bottom_is_the_table_and_old_block_y_becomes_table_y():
-    p = build_path(spec(kerf=0.0, table_y=33.0), machine(), AIRFOILS)
+    p = build_path(spec(table_y=33.0), machine(kerf=0.0), AIRFOILS)
     assert p.block[1] == pytest.approx(33.0)
     old = TEMPLATE.replace("table_y      = 20", "table_y =").replace("block_h      =", "block_y = 12\nblock_h =")
     assert WingSpec.parse(old).table_y == 12.0
@@ -322,15 +323,15 @@ def test_block_bottom_is_the_table_and_old_block_y_becomes_table_y():
 
 
 def test_dihedral_is_reported_not_cut():
-    plain = build_path(spec(kerf=0.0), machine(), AIRFOILS)
-    p = build_path(spec(kerf=0.0, dihedral=5.0), machine(), AIRFOILS)
+    plain = build_path(spec(), machine(kerf=0.0), AIRFOILS)
+    p = build_path(spec(dihedral=5.0), machine(kerf=0.0), AIRFOILS)
     assert p.root == plain.root and p.tip == plain.tip
     note = next(n for n in p.notes if n.startswith("V-Form 5"))
     assert "schleifen" in note and "35 mm hoeher" in note           # 400 * sin 5 deg
 
 
 def test_rapids_lift_before_moving_over_the_table():
-    code, path = generate(spec(kerf=0.0), machine(), AIRFOILS)
+    code, path = generate(spec(), machine(kerf=0.0), AIRFOILS)
     g0 = [l for l in code.splitlines() if l.startswith("G0 ")]
     assert g0[0].startswith("G0 Y") and "X" not in g0[0].split(";")[0]
     assert g0[1].startswith("G0 X") and "Y" not in g0[1].split(";")[0]
@@ -338,8 +339,8 @@ def test_rapids_lift_before_moving_over_the_table():
 
 
 def test_extrapolation_is_linear_in_span():
-    s = spec(kerf=0.0)
-    p = build_path(s, machine(), AIRFOILS)
+    s = spec()
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
     i = 7
     r, t, t1, t2 = p.root[i], p.tip[i], p.tower1[i], p.tower2[i]
     # the four points are collinear when parametrised by s
@@ -371,8 +372,8 @@ AXES_ORDER = ("X", "Y", "U", "V")
 
 
 def test_feed_is_inverse_time_of_the_faster_plane():
-    s = spec(feed=200.0, kerf=0.0)
-    code, path = generate(s, machine(), AIRFOILS)
+    s = spec(feed=200.0)
+    code, path = generate(s, machine(kerf=0.0), AIRFOILS)
     first = [l for l in code.splitlines() if l.startswith("G1 ")][0]
     f = float(first.split("F")[-1])
     seg = max(math.dist(path.entry_root, path.root[0]), math.dist(path.entry_tip, path.tip[0]))
@@ -436,8 +437,8 @@ def test_block_span_position_gives_the_sections_actually_cut():
     # root 120 at s=750 (rechts, root_gap 50), tip 50 at s=350; a 140 mm block
     # 280 mm from the root sits at s=470..330 - what the user had on the table.
     s = spec(root_chord=120.0, tip_chord=50.0, root_gap=50.0,
-             block_s=280.0, block_w=140.0, kerf=0.0)
-    p = build_path(s, machine(), AIRFOILS)
+             block_s=280.0, block_w=140.0)
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
     assert p.block_s == pytest.approx((470.0, 330.0))
     (sa, face_a), (sb, face_b) = p.faces
     chord = lambda pts: max(x for x, _ in pts) - min(x for x, _ in pts)
@@ -447,15 +448,15 @@ def test_block_span_position_gives_the_sections_actually_cut():
 
 
 def test_block_defaults_to_the_whole_panel_plus_margin():
-    s = spec(kerf=0.0)
-    p = build_path(s, machine(), AIRFOILS)
+    s = spec()
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
     lo, hi = sorted(p.block_s)
     assert hi - lo == pytest.approx(s.panel + s.margin)
     assert p.s_root in (lo, hi)
 
 
 def test_block_outside_the_towers_is_reported():
-    p = build_path(spec(block_s=700.0, block_w=100.0, kerf=0.0), machine(), AIRFOILS)
+    p = build_path(spec(block_s=700.0, block_w=100.0), machine(kerf=0.0), AIRFOILS)
     assert any("ausserhalb" in n for n in p.notes)
 
 
@@ -483,12 +484,12 @@ def test_unmeasured_tower_gap_is_flagged():
 
 def test_apex_of_a_tapered_wing_is_reported():
     # 120 -> 50 over 400 with the root 50 from tower 2: lines cross 64 from tower 1
-    p = build_path(spec(root_chord=120.0, tip_chord=50.0, root_gap=50.0, kerf=0.0),
-                   machine(), AIRFOILS)
+    p = build_path(spec(root_chord=120.0, tip_chord=50.0, root_gap=50.0),
+                   machine(kerf=0.0), AIRFOILS)
     note = [n for n in p.notes if "kreuzen" in n]
     assert note and "s=64" in note[0]
     # a rectangular wing has no apex
-    p = build_path(spec(root_chord=100.0, tip_chord=100.0, kerf=0.0), machine(), AIRFOILS)
+    p = build_path(spec(root_chord=100.0, tip_chord=100.0), machine(kerf=0.0), AIRFOILS)
     assert not any("kreuzen" in n for n in p.notes)
 
 

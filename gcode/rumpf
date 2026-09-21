@@ -1,0 +1,46 @@
+; foamcut shape
+
+[form]
+panel = 400
+points = 50
+
+[a]
+a_kind = ellipse
+a_w = 45
+a_h = 30
+a_r = 0
+a_hole = keine
+a_hole_w = 
+a_hole_h = 
+a_hole_r = 
+
+[b]
+b_kind = ellipse
+b_w = 30
+b_h = 20
+b_r = 0
+b_dx = 5
+b_dy = 0
+b_hole = keine
+b_hole_w = 
+b_hole_h = 
+b_hole_r = 0
+
+[lage]
+root_gap = 45
+block_x = 10
+table_y = 0
+lead = 10
+
+[schnitt]
+feed = 200
+wire = 0
+warmup = 1
+kerf = 1.0
+margin = 3
+
+[block]
+block_s = 0
+block_w = 403
+block_len = 76
+block_h = 57

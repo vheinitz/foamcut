@@ -153,7 +153,10 @@ foamcut run gcode/02_taper.nc       # tapered block, towers travel different dis
 ```
 
 The taper is the test a 3 axis controller cannot pass. Measure both ends: left
-should be 60 mm, right 30 mm, minus the kerf.
+should be 60 mm, right 30 mm, minus the kerf. What is missing is the kerf
+(Schnittbreite): enter it once on the machine page (or `foamcut machine set
+--kerf 1.2`); it lives in `machine.json` and applies to wings, shapes and
+batches alike - a `kerf` line in an old `.wing`/`.shape` file is ignored.
 
 Then set feed and wire power together — see "Feed rate and temperature" in the
 [reference project's README](https://github.com/rahulsarchive/4AxisFoamCutter).

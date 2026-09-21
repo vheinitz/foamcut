@@ -9,8 +9,8 @@ from foamcut.machine import Machine
 from foamcut.wing import WingError
 
 
-def machine():
-    m = Machine(); m.tower_gap_mm = 615.0; m.tower_gap_measured = True
+def machine(kerf=1.0):
+    m = Machine(); m.tower_gap_mm = 615.0; m.tower_gap_measured = True; m.kerf_mm = kerf
     return m
 
 
@@ -53,13 +53,13 @@ def test_angle_resampling_starts_at_the_rear_and_closes():
 
 
 def test_ring_path_goes_through_a_rear_slit():
-    s = spec(a_hole="kreis", b_hole="kreis", kerf=0.0)
+    s = spec(a_hole="kreis", b_hole="kreis")
     a = sh.side_path(s.a, 12, 0.0)
     n = 13
     assert len(a) == 2 * n + 1
     assert a[0] == pytest.approx((-30.0, 0.0)) and a[n] == pytest.approx((-10.0, 0.0))   # outer rear -> hole rear
     assert a[-1] == pytest.approx(a[0])                                                    # back out
-    p = sh.build_path(s, machine())
+    p = sh.build_path(s, machine(kerf=0.0))
     assert len(p.root) == len(p.tip) == 2 * n + 1 or len(p.root) == 2 * (s.points + 1) + 1
 
 
