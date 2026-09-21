@@ -1,5 +1,5 @@
 {
-  "cut_feed": 300.0,
+  "cut_feed": 100.0,
   "homing": {
     "auto": true,
     "enabled": true,
@@ -34,7 +34,7 @@
     "Y": true
   },
   "jog_feed": 375.0,
-  "kerf_mm": 1.0,
+  "kerf_mm": 4.0,
   "max_rate": {
     "U": 375.0,
     "V": 137.9,
@@ -58,5 +58,5 @@
   },
   "warmup_s": 3.0,
   "wire_fixed_tower": 2,
-  "wire_power": 30
+  "wire_power": 100
 }
