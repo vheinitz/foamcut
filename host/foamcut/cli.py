@@ -381,6 +381,12 @@ def cmd_machine(args) -> int:
             m.tower_gap_measured = True
         if args.wire_fixed is not None:
             m.wire_fixed_tower = args.wire_fixed
+        if args.feed is not None:
+            m.cut_feed = args.feed
+        if args.wire is not None:
+            m.wire_power = args.wire
+        if args.warmup is not None:
+            m.warmup_s = args.warmup
         if args.kerf is not None:
             if args.kerf < 0:
                 print("error: kerf muss >= 0 sein", file=sys.stderr)
@@ -392,7 +398,8 @@ def cmd_machine(args) -> int:
           + ("" if m.tower_gap_measured else "   <- NICHT gemessen, Platzhalter"))
     print(f"Draht fest an Turm {m.wire_fixed_tower} ({'X/Y' if m.wire_fixed_tower == 1 else 'U/V'}), "
           "dort liegt die Fluegelwurzel")
-    print(f"Schnittbreite (Kerf): {m.kerf_mm:g} mm")
+    print(f"Schnitt: Vorschub {m.cut_feed:g} mm/min, Draht S{m.wire_power} (0 = GUI-Schieber), "
+          f"Aufheizen {m.warmup_s:g} s, Schnittbreite (Kerf) {m.kerf_mm:g} mm")
     print("Schritte/mm:", "  ".join(f"{a} {m.steps_per_mm[a]:g}" for a in AXES))
     print("Max mm/min: ", "  ".join(f"{a} {m.max_rate[a]:g}" for a in AXES))
     print("Verfahrweg: ", "  ".join(f"{a} {m.travel_mm[a]:g}" for a in AXES))
@@ -439,7 +446,7 @@ def cmd_nest(args) -> int:
     m = Machine.load_or_none(Path(args.machine)) or Machine()
     try:
         batch = ns.Batch.parse(Path(args.batch).read_text(), Path(args.batch).parent)
-        code, nest = ns.generate(batch, m, Path(args.airfoils), feed=args.feed or m.cut_feed)
+        code, nest = ns.generate(batch, m, Path(args.airfoils))
     except (WingError, OSError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -747,6 +754,9 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--wire-fixed", type=int, choices=(1, 2), dest="wire_fixed",
                    help="Turm, an dem der Draht fest eingespannt ist (1 = X/Y, 2 = U/V); Wurzelseite")
     c.add_argument("--kerf", type=float, help="Schnittbreite in mm (Testschnitt messen); gilt fuer Fluegel, Formen, Stapel")
+    c.add_argument("--feed", type=float, help="Drahtvorschub mm/min (schnellere Schnittebene)")
+    c.add_argument("--wire", type=int, help="Heizleistung S 1..255, 0 = GUI-Schieber")
+    c.add_argument("--warmup", type=float, help="Aufheizzeit in s vor der ersten Fahrt")
     c.set_defaults(func=cmd_machine)
 
     c = sub.add_parser("jogpad", help="keyboard jogging")
@@ -769,7 +779,6 @@ def build_parser() -> argparse.ArgumentParser:
     c = sub.add_parser("nest", help="several saved parts stacked in one block -> one program")
     c.add_argument("batch", nargs="?", help=".batch list (foamcut nest --template)")
     c.add_argument("-o", "--out")
-    c.add_argument("--feed", type=float, help="mm/min for all parts (default: machine cut_feed)")
     c.add_argument("--airfoils", default="airfoil", help=argparse.SUPPRESS)
     c.add_argument("--template", action="store_true")
     c.set_defaults(func=cmd_nest)

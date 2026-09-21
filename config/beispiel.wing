@@ -32,9 +32,6 @@ block_y      =
 block_h      =
 
 [schnitt]
-feed         = 200            ; Drahtgeschwindigkeit im Schaum, mm/min (schnellere Ebene)
-wire         = 0              ; Heizleistung S 1..255, 0 = Schieber der GUI
-warmup       = 3              ; Sekunden Aufheizen vor dem Einlauf
 points       = 60             ; Stuetzpunkte je Profilseite
 margin       = 10             ; Rand des Profils zu Vorder-, Ober-, Unter- und Endseite des Blocks
 

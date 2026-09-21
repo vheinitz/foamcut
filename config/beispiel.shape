@@ -34,9 +34,6 @@ table_y      = 20           ; Tischoberkante Y [mm]: Hoehe der Tischoberkante (=
 lead         = 12           ; Einlauf [mm]: Strecke im Schaum von der Blockrueckseite bis zum hintersten Punkt der Form.
 
 [schnitt]  ; Schnitt
-feed         = 200          ; Drahtvorschub [mm/min]: Geschwindigkeit des Drahts im Schaum, bezogen auf die schnellere der beiden Seiten.
-wire         = 0            ; Heizleistung S [1..255]: PWM-Stufe des Heizdrahts. 0 = Wert vom Schieber im Hauptfenster uebernehmen.
-warmup       = 3            ; Aufheizen [s]: Wartezeit nach dem Einschalten des Drahts.
 margin       = 10           ; Rand [mm]: Mindestabstand der Form zu Vorderseite, Ober-, Unterseite und Seite B des Blocks.
 
 [block]  ; Block

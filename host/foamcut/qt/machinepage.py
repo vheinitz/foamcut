@@ -63,9 +63,12 @@ class MachinePage(QWidget):
         self.power.valueChanged.connect(lambda val: self.power_lbl.setText(f"S{val}"))
         self.b_wire_on.clicked.connect(lambda: self.send_line.emit(model.hotwire(self.power.value())))
         self.b_wire_off.clicked.connect(lambda: self.send_line.emit("M5"))
-        self.kerf.setText(f"{machine.kerf_mm:g}"); self.kerf.editingFinished.connect(self._kerf_changed)
+        # cut settings live in machine.json - one set for every generator
+        for w, attr in ((self.cut_feed, "cut_feed"), (self.warmup, "warmup_s"), (self.kerf, "kerf_mm")):
+            w.setText(f"{getattr(machine, attr):g}")
+            w.editingFinished.connect(lambda w=w, attr=attr: self._cut_setting(w, attr))
+        self.power.sliderReleased.connect(self._power_changed)
         # straight cut
-        self.cut_feed.setText(f"{machine.cut_feed:g}")
         for b, angle in ((self.b_cut_fwd, 0.0), (self.b_cut_back, 180.0), (self.b_cut_up, 90.0), (self.b_cut_down, 270.0)):
             b.clicked.connect(lambda _, a=angle: self._cut(a))
         self.b_cut_angle.clicked.connect(lambda: self._cut(None))
@@ -104,16 +107,20 @@ class MachinePage(QWidget):
         g.addWidget(self._btn("▼ Y−V−", {"Y": -1, "V": -1}), 2, 1)
         return box
 
-    def _kerf_changed(self):
+    def _cut_setting(self, w, attr):
         try:
-            val = float(self.kerf.text().replace(",", "."))
-            if val < 0:
+            val = float(w.text().replace(",", "."))
+            if val < 0 or (attr == "cut_feed" and val <= 0):
                 raise ValueError
         except ValueError:
-            self.log("! Schnittbreite muss eine Zahl >= 0 sein"); self.kerf.setText(f"{self.machine.kerf_mm:g}"); return
-        if val != self.machine.kerf_mm:
-            self.machine.kerf_mm = val; self.machine.save()
-            self.log(f"Schnittbreite {val:g} mm gespeichert"); self.machine_changed.emit()
+            self.log(f"! {attr}: keine gueltige Zahl"); w.setText(f"{getattr(self.machine, attr):g}"); return
+        if val != getattr(self.machine, attr):
+            setattr(self.machine, attr, val); self.machine.save()
+            self.log(f"{attr} = {val:g} gespeichert (machine.json)"); self.machine_changed.emit()
+
+    def _power_changed(self):
+        if self.power.value() != self.machine.wire_power:
+            self.machine.wire_power = self.power.value(); self.machine.save(); self.machine_changed.emit()
 
     def save_travel(self, axis):
         val = self.model.record_travel(axis)
@@ -137,15 +144,14 @@ class MachinePage(QWidget):
         """Winkel: 0 = vor, 90 = hoch, 180 = zurück, 270 = runter; None = Feld."""
         try:
             length = float(self.cut_len.text().replace(",", "."))
-            feed = float(self.cut_feed.text().replace(",", "."))
+            feed = self.machine.cut_feed
             du, dv = self._skew()
             if angle is None:
                 angle = float(self.cut_angle.text().replace(",", "."))
         except ValueError:
-            self.log("! Freischnitt: Länge, Vorschub, Winkel und Versatz müssen Zahlen sein"); return
-        if length <= 0 or feed <= 0:
-            self.log("! Freischnitt: Länge und Vorschub müssen > 0 sein"); return
-        self.machine.cut_feed = feed
+            self.log("! Freischnitt: Länge, Winkel und Versatz müssen Zahlen sein"); return
+        if length <= 0:
+            self.log("! Freischnitt: Länge muss > 0 sein"); return
         self.cut_requested.emit(length, angle, feed, self.cut_back.isChecked(), du, dv)
 
     def show_status(self, st: dict, wpos: dict):

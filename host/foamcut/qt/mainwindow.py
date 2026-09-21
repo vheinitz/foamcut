@@ -89,7 +89,7 @@ class MainWindow(QMainWindow):
         """Freischnitt: a straight relative cut from the current position, run
         through the program page so pause/stop/progress work as usual."""
         from ..jog import straight_cut
-        code = straight_cut(length, angle, feed, warmup=3.0, back=back, skew=(du, dv))
+        code = straight_cut(length, angle, feed, warmup=self.machine.warmup_s, back=back, skew=(du, dv))
         name = f"freischnitt_{length:g}mm_{angle:g}deg" + (f"_u{du:g}v{dv:g}" if (du or dv) else "") + ".nc"
         self.program_page.set_program(code, name, start_pos=self.wpos())
         self.nav.setCurrentRow(4)

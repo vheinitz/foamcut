@@ -82,11 +82,6 @@ FIELDS = [
          "Strecke im Schaum von der Blockrueckseite bis zum hintersten Punkt der Form.", "num"),
     ]),
     ("schnitt", "Schnitt", [
-        ("feed", "Drahtvorschub", "mm/min", "200",
-         "Geschwindigkeit des Drahts im Schaum, bezogen auf die schnellere der beiden Seiten.", "num"),
-        ("wire", "Heizleistung S", "1..255", "0",
-         "PWM-Stufe des Heizdrahts. 0 = Wert vom Schieber im Hauptfenster uebernehmen.", "int"),
-        ("warmup", "Aufheizen", "s", "3", "Wartezeit nach dem Einschalten des Drahts.", "num"),
         ("margin", "Rand", "mm", "10",
          "Mindestabstand der Form zu Vorderseite, Ober-, Unterseite und Seite B des Blocks.", "num"),
     ]),
@@ -102,7 +97,8 @@ TEMPLATE = _template(FIELDS, ("; Freie Form fuer den Schaumschneider: ein Quersc
                               "; Alle Masse in mm. Zeilen mit ; sind Kommentare."))
 _CHOICES = {key: kind.split(":", 1)[1].split("|")
             for key, (_, _, _, _, kind) in field_catalogue(FIELDS).items() if kind.startswith("choice:")}
-_INTS = {"points", "wire"}
+_INTS = {"points"}
+_MACHINE_KEYS = {"kerf", "feed", "wire", "warmup"}     # accepted in old files, ignored
 _REQUIRED = {"panel", "root_gap", "block_x", "table_y"}
 
 
@@ -131,9 +127,6 @@ class ShapeSpec:
     table_y: float = 20.0
     chord_y: float | None = None        # never set here; loft() accepts it for legacy wings
     lead: float = 12.0
-    feed: float = 200.0
-    wire: int = 0
-    warmup: float = 3.0
     margin: float = 10.0
     block_s: float | None = None
     block_w: float | None = None
@@ -158,7 +151,7 @@ class ShapeSpec:
                 raise WingError(f"Zeile {n}: erwartet 'name = wert': {raw.strip()!r}")
             key, _, value = line.partition("=")
             key, value = key.strip().lower(), value.strip()
-            if key == "kerf":                       # old files: the kerf now lives in machine.json
+            if key in _MACHINE_KEYS:                # old files: these live in machine.json now
                 continue
             target, attr = spec, key
             if key[:2] in ("a_", "b_"):
@@ -190,8 +183,8 @@ class ShapeSpec:
             raise WingError("Loch: beide Seiten brauchen ein Loch oder keines")
         if spec.points < 12:
             raise WingError("points: mindestens 12")
-        if spec.panel <= 0 or spec.feed <= 0:
-            raise WingError("panel und feed muessen > 0 sein")
+        if spec.panel <= 0:
+            raise WingError("panel muss > 0 sein")
         if spec.lead < 0 or spec.margin < 0:
             raise WingError("lead und margin duerfen nicht negativ sein")
         return spec
@@ -311,8 +304,8 @@ def _signed_area(loop: list[Point]) -> float:
 
 def generate(spec: ShapeSpec, machine: Machine, airfoil_dir: Path | None = None) -> tuple[str, WingPath]:
     path = build_path(spec, machine)
-    header = ["; foamcut shape: " + path.notes[1][6:], f"; Kerf {machine.kerf_mm:g}, Vorschub {spec.feed:g} mm/min"]
-    return emit_gcode(path, spec.feed, spec.wire, spec.warmup, header), path
+    header = ["; foamcut shape: " + path.notes[1][6:], f"; Kerf {machine.kerf_mm:g}, Vorschub {machine.cut_feed:g} mm/min"]
+    return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header), path
 
 
 def shape_name(spec: ShapeSpec) -> str:
