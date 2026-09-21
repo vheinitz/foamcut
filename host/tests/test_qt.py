@@ -263,6 +263,20 @@ def test_machine_page_jog_buttons_emit_grbl_commands(win, app):
     assert sent[-1].startswith("$J=G91 G21 X5.000 U5.000 F")
 
 
+def test_kerf_lives_on_the_machine_page_and_reshapes_the_designs(win, app, tmp_path):
+    """One kerf for wings, shapes and batches: edited on the machine page, saved
+    to machine.json, and the design pages regenerate with it."""
+    from foamcut.machine import Machine
+    wp = win.wing_page
+    wp.rebuild(); before = wp.path.root
+    win.machine_page.kerf.setText("3"); win.machine_page.kerf.editingFinished.emit(); app.processEvents()
+    assert Machine.load(tmp_path / "machine.json").kerf_mm == 3.0
+    assert wp.path.root != before                       # wider melt channel -> other wire path
+    assert "kerf" not in wp.model.template               # no longer a per-part field
+    win.machine_page.kerf.setText("x"); win.machine_page.kerf.editingFinished.emit()
+    assert win.machine_page.kerf.text() == "3"          # bad input is refused, old value stays
+
+
 def test_homing_dialog_opens_and_validates(win, app):
     from foamcut.qt.homingdialog import HomingDialog
     d = HomingDialog(win.machine, lambda: None, print, lambda: None, win)

@@ -118,6 +118,9 @@ class Machine:
     jog_feed: float = 750.0     # horizontal jog; vertical is clamped to max_rate
     cut_feed: float = 300.0
     wire_power: int = 0
+    # width of the melt channel; one value for wings, shapes and batches - it
+    # belongs to wire, power and foam, not to the part (measure a test cut)
+    kerf_mm: float = 1.0
     notes: str = ""
 
     # ------------------------------------------------------------ grbl -----

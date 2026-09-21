@@ -66,6 +66,9 @@
  <item><widget class="QLabel" name="power_lbl"><property name="text"><string>S0</string></property><property name="styleSheet"><string>min-width:48px;</string></property></widget></item>
  <item><widget class="QPushButton" name="b_wire_on"><property name="text"><string>Draht AN</string></property></widget></item>
  <item><widget class="QPushButton" name="b_wire_off"><property name="text"><string>Draht AUS</string></property></widget></item>
+ <item><widget class="QLabel" name="kerf_lbl"><property name="text"><string>   Schnittbreite</string></property><property name="toolTip"><string>Breite des Schmelzkanals; gilt fuer Fluegel, Formen und Stapel. Testschnitt messen.</string></property></widget></item>
+ <item><widget class="QLineEdit" name="kerf"><property name="text"><string>1.0</string></property><property name="maximumSize"><size><width>60</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
+ <item><widget class="QLabel" name="kerf_unit"><property name="text"><string>mm</string></property></widget></item>
 </layout>
     </widget>
    </item>

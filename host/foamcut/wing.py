@@ -95,8 +95,6 @@ FIELDS = [
          "PWM-Stufe des Heizdrahts. 0 = Wert vom Schieber im Hauptfenster uebernehmen.", "int"),
         ("warmup", "Aufheizen", "s", "3",
          "Wartezeit nach dem Einschalten des Drahts, bevor die Fahrt beginnt.", "num"),
-        ("kerf", "Schnittbreite", "mm", "1.0",
-         "Breite des Schmelzkanals. Der Pfad laeuft um die Haelfte davon ausserhalb der Kontur.", "num"),
         ("points", "Stuetzpunkte je Seite", "", "60",
          "Punkte je Profilseite (oben/unten). Mehr = glatter, mehr G-Code-Zeilen.", "int"),
         ("margin", "Rand", "mm", "10",
@@ -186,7 +184,7 @@ TEMPLATE = _template()
 _NUMERIC = {
     "root_chord", "tip_chord", "panel", "area", "taper", "sweep", "washout", "dihedral", "root_gap", "block_x", "te_x",
     "table_y", "chord_y", "lead", "block_s", "block_w", "block_len", "block_y", "block_h", "feed",
-    "wire", "warmup", "kerf", "points", "margin", "aileron", "hinge_skin", "hinge_v",
+    "wire", "warmup", "points", "margin", "aileron", "hinge_skin", "hinge_v",
 }
 _REQUIRED = {"root_airfoil", "root_chord", "panel", "root_gap", "block_x"}
 
@@ -245,7 +243,6 @@ class WingSpec:
     feed: float = 200.0
     wire: int = 0
     warmup: float = 3.0
-    kerf: float = 1.0
     points: int = 60
     margin: float = 10.0
     aileron: float = 0.0                # % of chord, 0 = no hinge cut
@@ -266,6 +263,8 @@ class WingSpec:
             key, value = key.strip().lower(), value.strip()
             if key == "side":                       # old files: rechts = Wurzel an Turm 2
                 key, value = "mirror", legacy_side_to_mirror(value)
+            if key == "kerf":                       # old files: the kerf now lives in machine.json
+                continue
             if not hasattr(spec, key):
                 raise WingError(f"Zeile {n}: unbekannter Parameter {key!r}")
             if value == "":
@@ -546,8 +545,8 @@ def build_path(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> WingPath:
     # build relative to the chord line (y = 0) first: the chord height follows
     # from the table below, which needs the profile's lowest point
     ail = (spec.aileron, spec.hinge_skin, spec.hinge_v) if spec.aileron > 0 else None
-    root = _profile_mm(loop_r, spec.root_chord, te_x, 0.0, 0.0, spec.kerf, ail)
-    tip = _profile_mm(loop_t, spec.tip_chord, tip_te_x, 0.0, spec.washout, spec.kerf, ail)
+    root = _profile_mm(loop_r, spec.root_chord, te_x, 0.0, 0.0, machine.kerf_mm, ail)
+    tip = _profile_mm(loop_t, spec.tip_chord, tip_te_x, 0.0, spec.washout, machine.kerf_mm, ail)
     if spec.mirror:
         # upside down about the chord line; turning the cut piece over about its
         # chord axis then gives the mirror-image (opposite-hand) panel
@@ -665,7 +664,7 @@ def generate(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> tuple[str, 
         f"; foamcut wing: {spec.root_airfoil} {spec.root_chord:g} -> "
         f"{spec.tip_airfoil} {spec.tip_chord:g}, Panel {spec.panel:g}"
         + (", spiegelverkehrt" if spec.mirror else "") + (f", Ruder {spec.aileron:g} %" if spec.aileron > 0 else ""),
-        f"; Pfeilung {spec.sweep:g}, Schraenkung {spec.washout:g} deg, Kerf {spec.kerf:g}, "
+        f"; Pfeilung {spec.sweep:g}, Schraenkung {spec.washout:g} deg, Kerf {machine.kerf_mm:g}, "
         f"Vorschub {spec.feed:g} mm/min",
     ]
     return emit_gcode(path, spec.feed, spec.wire, spec.warmup, header), path

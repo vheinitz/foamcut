@@ -20,6 +20,7 @@ class MachinePage(QWidget):
     set_reference = pyqtSignal()
     cut_requested = pyqtSignal(float, float, float, bool, float, float)   # length, angle, feed, back, dU, dV
     homing_dialog = pyqtSignal()
+    machine_changed = pyqtSignal()      # kerf etc. edited here: design pages regenerate
 
     def __init__(self, machine: Machine, model: JogModel, log, parent=None):
         super().__init__(parent)
@@ -62,6 +63,7 @@ class MachinePage(QWidget):
         self.power.valueChanged.connect(lambda val: self.power_lbl.setText(f"S{val}"))
         self.b_wire_on.clicked.connect(lambda: self.send_line.emit(model.hotwire(self.power.value())))
         self.b_wire_off.clicked.connect(lambda: self.send_line.emit("M5"))
+        self.kerf.setText(f"{machine.kerf_mm:g}"); self.kerf.editingFinished.connect(self._kerf_changed)
         # straight cut
         self.cut_feed.setText(f"{machine.cut_feed:g}")
         for b, angle in ((self.b_cut_fwd, 0.0), (self.b_cut_back, 180.0), (self.b_cut_up, 90.0), (self.b_cut_down, 270.0)):
@@ -101,6 +103,17 @@ class MachinePage(QWidget):
         g.addWidget(self._btn("X+U+ ▶", {"X": +1, "U": +1}), 1, 2)
         g.addWidget(self._btn("▼ Y−V−", {"Y": -1, "V": -1}), 2, 1)
         return box
+
+    def _kerf_changed(self):
+        try:
+            val = float(self.kerf.text().replace(",", "."))
+            if val < 0:
+                raise ValueError
+        except ValueError:
+            self.log("! Schnittbreite muss eine Zahl >= 0 sein"); self.kerf.setText(f"{self.machine.kerf_mm:g}"); return
+        if val != self.machine.kerf_mm:
+            self.machine.kerf_mm = val; self.machine.save()
+            self.log(f"Schnittbreite {val:g} mm gespeichert"); self.machine_changed.emit()
 
     def save_travel(self, axis):
         val = self.model.record_travel(axis)

@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
         self.machine_page.connect_toggle.connect(self.toggle_connection)
         self.machine_page.home_requested.connect(lambda: self.worker and self.worker.submit("home"))
         self.machine_page.homing_dialog.connect(self.open_homing)
+        self.machine_page.machine_changed.connect(lambda: [p.rebuild() for p in (self.wing_page, self.shape_page, self.batch_page)])
         for page in (self.wing_page, self.shape_page, self.batch_page):
             page.gcode_ready.connect(self.program_page.set_program)
             page.gcode_ready.connect(lambda *_: self.nav.setCurrentRow(4))

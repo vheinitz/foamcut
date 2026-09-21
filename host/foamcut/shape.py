@@ -87,8 +87,6 @@ FIELDS = [
         ("wire", "Heizleistung S", "1..255", "0",
          "PWM-Stufe des Heizdrahts. 0 = Wert vom Schieber im Hauptfenster uebernehmen.", "int"),
         ("warmup", "Aufheizen", "s", "3", "Wartezeit nach dem Einschalten des Drahts.", "num"),
-        ("kerf", "Schnittbreite", "mm", "1.0",
-         "Breite des Schmelzkanals. Aussen laeuft der Pfad die Haelfte davon ausserhalb, im Loch innerhalb.", "num"),
         ("margin", "Rand", "mm", "10",
          "Mindestabstand der Form zu Vorderseite, Ober-, Unterseite und Seite B des Blocks.", "num"),
     ]),
@@ -136,7 +134,6 @@ class ShapeSpec:
     feed: float = 200.0
     wire: int = 0
     warmup: float = 3.0
-    kerf: float = 1.0
     margin: float = 10.0
     block_s: float | None = None
     block_w: float | None = None
@@ -161,6 +158,8 @@ class ShapeSpec:
                 raise WingError(f"Zeile {n}: erwartet 'name = wert': {raw.strip()!r}")
             key, _, value = line.partition("=")
             key, value = key.strip().lower(), value.strip()
+            if key == "kerf":                       # old files: the kerf now lives in machine.json
+                continue
             target, attr = spec, key
             if key[:2] in ("a_", "b_"):
                 target, attr = getattr(spec, key[0]), key[2:]
@@ -288,8 +287,8 @@ def side_path(side: Side, n: int, kerf: float) -> list[Point]:
 
 
 def build_path(spec: ShapeSpec, machine: Machine) -> WingPath:
-    a = side_path(spec.a, spec.points, spec.kerf)
-    b = [(x + spec.b.dx, y + spec.b.dy) for x, y in side_path(spec.b, spec.points, spec.kerf)]
+    a = side_path(spec.a, spec.points, machine.kerf_mm)
+    b = [(x + spec.b.dx, y + spec.b.dy) for x, y in side_path(spec.b, spec.points, machine.kerf_mm)]
     rear = min(min(x for x, _ in a), min(x for x, _ in b))
     shift = spec.block_x + spec.lead - rear             # rearmost point sits `lead` past the block face
     a = [(x + shift, y) for x, y in a]
@@ -312,7 +311,7 @@ def _signed_area(loop: list[Point]) -> float:
 
 def generate(spec: ShapeSpec, machine: Machine, airfoil_dir: Path | None = None) -> tuple[str, WingPath]:
     path = build_path(spec, machine)
-    header = ["; foamcut shape: " + path.notes[1][6:], f"; Kerf {spec.kerf:g}, Vorschub {spec.feed:g} mm/min"]
+    header = ["; foamcut shape: " + path.notes[1][6:], f"; Kerf {machine.kerf_mm:g}, Vorschub {spec.feed:g} mm/min"]
     return emit_gcode(path, spec.feed, spec.wire, spec.warmup, header), path
 
 
