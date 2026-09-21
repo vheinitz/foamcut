@@ -641,7 +641,10 @@ def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: li
         prev_r, prev_t = pr, pt
     out += [
         "G94",
-        "G0 X0 U0 ; zurueck ueber dem Tisch - Draht bleibt heiss, falls der Block weiter hinten liegt als gedacht",
+        # Retreat at cut feed with the wire hot: if the block sits further back than
+        # the spec says, the wire is still in foam here - a rapid would tear, a cold
+        # wire would stick.
+        f"G1 X0 U0 F{feed:g} ; zurueck ueber dem Tisch, Draht noch heiss, Schnittvorschub",
         "M5 ; Draht aus, erst bei X0/U0",
         "G0 Y0 V0 ; dann senken",
         "M2",

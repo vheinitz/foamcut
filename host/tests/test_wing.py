@@ -337,9 +337,10 @@ def test_rapids_lift_before_moving_over_the_table():
     g0 = [l for l in code.splitlines() if l.startswith("G0 ")]
     assert g0[0].startswith("G0 Y") and "X" not in g0[0].split(";")[0]
     assert g0[1].startswith("G0 X") and "Y" not in g0[1].split(";")[0]
-    assert g0[-2].startswith("G0 X0 U0") and g0[-1].startswith("G0 Y0 V0")
+    assert g0[-1].startswith("G0 Y0 V0")
     tail = [l.split(";")[0].strip() for l in code.splitlines() if l.split(";")[0].strip()][-4:]
-    assert tail == ["G0 X0 U0", "M5", "G0 Y0 V0", "M2"]      # wire off only once the carriages are back
+    # back at cut feed with the wire still hot, off only once the carriages are at X0/U0
+    assert tail == ["G1 X0 U0 F300", "M5", "G0 Y0 V0", "M2"]
 
 
 def test_extrapolation_is_linear_in_span():
@@ -366,7 +367,7 @@ def test_generated_gcode_is_valid_and_one_pass():
     assert sum(1 for l in lines if l.startswith("G93")) == 1
     assert lines[-1] == "M2"
     # ends where it entered: the exit move returns to the entry point
-    g1 = [l for l in lines if l.startswith("G1 ")]
+    g1 = [l for l in lines if l.startswith("G1 ")][:-1]       # the last G1 is the hot retreat to X0/U0
     assert g1[-1].split(" F")[0][3:] == " ".join(
         f"{a}{v:.3f}" for a, v in zip(AXES_ORDER, (path.entry_t1[0], path.entry_t1[1],
                                                   path.entry_t2[0], path.entry_t2[1])))
