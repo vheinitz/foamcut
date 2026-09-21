@@ -8,17 +8,25 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
-                             QLabel, QLineEdit, QListWidget, QPushButton, QRadioButton, QScrollArea,
-                             QSplitter, QStackedWidget, QVBoxLayout, QWidget)
+                             QLabel, QLineEdit, QPushButton, QRadioButton, QScrollArea, QSizePolicy, QWidget)
 
 from .. import gcode as gc
 from ..machine import Machine
 from ..wing import WING_MODEL, Model, WingError, field_catalogue
-from .canvas import LAYERS, FrontView, TopView
+from .canvas import LAYERS, FrontView, TopView, ViewFrame
 from .state import UiState
+from .uiload import load_ui
+
+LAYER_COLUMNS = 4          # the "Einblenden" checkboxes wrap into this many columns
 
 WARN_STYLE = "background:#fff4d6; border:1px solid #e0c070; padding:4px 8px; border-radius:4px;"
 ERR_STYLE = "background:#ffd9d9; border:1px solid #e08080; padding:4px 8px; border-radius:4px;"
+
+
+def _ignore_width(label):
+    """A wrapped label must not widen the window: its text wraps to whatever
+    width the layout gives it (heightForWidth still works with Ignored)."""
+    label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 OK_STYLE = "background:#e4f5e4; border:1px solid #8fd19e; padding:4px 8px; border-radius:4px;"
 
 
@@ -43,11 +51,8 @@ class DesignPage(QWidget):
         saved = state.get(model.key, {})
         cat = field_catalogue(model.fields)
 
-        # ---- left: step list + stacked forms ---------------------------
-        self.nav = QListWidget()
-        self.nav.setFixedWidth(150)
-        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.stack = QStackedWidget()
+        load_ui("designpage", self)      # nav, stack, layer_layout, views, messages_layout, result, bottom bar
+        # ---- left: step list + stacked forms (one page per FIELDS section) --
         for section, title, fields in model.fields + [("machine", "Maschine", [])]:
             self.nav.addItem(title)
             page = QWidget()
@@ -96,44 +101,20 @@ class DesignPage(QWidget):
         # ---- right: layer toggles, drawings, result -------------------------
         self.front = FrontView()
         self.top = TopView()
+        self.views.addWidget(ViewFrame(self.front)); self.views.addWidget(ViewFrame(self.top)); self.views.setSizes([460, 220])
         shown = state.get(f"{model.key}_layers", {})
-        layer_bar = QHBoxLayout(); layer_bar.setSpacing(10)
-        layer_bar.addWidget(QLabel("Einblenden:"))
         self.layer_boxes: dict[str, QCheckBox] = {}
-        for key, text in LAYERS:
+        for i, (key, text) in enumerate(LAYERS):
             box = QCheckBox(text); box.setChecked(bool(shown.get(key, True)))
             box.toggled.connect(self._layers_changed)
-            layer_bar.addWidget(box); self.layer_boxes[key] = box
-        layer_bar.addStretch()
+            self.layer_layout.addWidget(box, i // LAYER_COLUMNS, i % LAYER_COLUMNS); self.layer_boxes[key] = box
         self._layers_changed()
-        self.messages = QVBoxLayout()
-        self.messages.setSpacing(3)
-        msg_box = QWidget(); msg_box.setLayout(self.messages)
-        self.result = QLabel(""); self.result.setStyleSheet("font-family:monospace; font-size:9pt;")
-        right = QWidget(); rv = QVBoxLayout(right); rv.setContentsMargins(0, 0, 0, 0)
-        rv.addLayout(layer_bar)
-        views = QSplitter(Qt.Orientation.Vertical)
-        views.addWidget(self.front); views.addWidget(self.top)
-        views.setSizes([460, 220])
-        rv.addWidget(views, 1)
-        rv.addWidget(msg_box)
-        rv.addWidget(self.result)
+        self.messages = self.messages_layout
 
         # ---- bottom bar ------------------------------------------------
-        bar = QHBoxLayout()
-        b_load = QPushButton("Laden…"); b_load.clicked.connect(self.load_spec)
-        b_save = QPushButton("Speichern…"); b_save.clicked.connect(self.save_spec)
-        self.b_prog = QPushButton("→ Programm"); self.b_prog.clicked.connect(self.to_program)
-        b_gc = QPushButton("G-Code speichern…"); b_gc.clicked.connect(self.save_gcode)
-        self.stale = QLabel(""); self.stale.setStyleSheet("color:#b00; font-weight:bold;")
-        bar.addWidget(b_load); bar.addWidget(b_save); bar.addSpacing(16); bar.addWidget(self.stale)
-        bar.addStretch(); bar.addWidget(b_gc); bar.addWidget(self.b_prog)
-
-        left = QWidget(); lv = QHBoxLayout(left); lv.setContentsMargins(0, 0, 0, 0)
-        lv.addWidget(self.nav); lv.addWidget(self.stack, 1)
-        split = QSplitter(); split.addWidget(left); split.addWidget(right)
-        split.setSizes([620, 760])
-        outer = QVBoxLayout(self); outer.addWidget(split, 1); outer.addLayout(bar)
+        self.b_load.clicked.connect(self.load_spec); self.b_save.clicked.connect(self.save_spec)
+        self.b_gcode.clicked.connect(self.save_gcode); self.b_prog.clicked.connect(self.to_program)
+        self.split.setSizes([620, 760])
         QTimer.singleShot(0, self.rebuild)
 
     # ---- machine step (tower gap) ------------------------------------------
@@ -234,7 +215,7 @@ class DesignPage(QWidget):
 
     # ---- build ------------------------------------------------------------
     def _message(self, text: str, style: str):
-        lab = QLabel(text); lab.setWordWrap(True); lab.setStyleSheet(style)
+        lab = QLabel(text); lab.setWordWrap(True); lab.setStyleSheet(style); _ignore_width(lab)
         self.messages.addWidget(lab)
 
     def rebuild(self) -> bool:

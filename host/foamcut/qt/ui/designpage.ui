@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DesignPage</class>
+ <widget class="QWidget" name="DesignPage">
+  <layout class="QVBoxLayout" name="page_layout">
+   <item>
+    <widget class="QSplitter" name="split">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <widget class="QWidget" name="left_widget">
+      <layout class="QHBoxLayout" name="left_layout">
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
+       <item>
+        <widget class="QListWidget" name="nav">
+         <property name="minimumSize"><size><width>150</width><height>0</height></size></property>
+         <property name="maximumSize"><size><width>150</width><height>16777215</height></size></property>
+         <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QStackedWidget" name="stack">
+         <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+       <widget class="QWidget" name="right_widget">
+        <layout class="QVBoxLayout" name="right_layout">
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <item>
+          <widget class="QGroupBox" name="layer_box">
+           <property name="title"><string>Einblenden</string></property>
+           <layout class="QGridLayout" name="layer_layout">
+            <property name="topMargin"><number>2</number></property>
+            <property name="bottomMargin"><number>2</number></property>
+            <property name="horizontalSpacing"><number>12</number></property>
+            <property name="verticalSpacing"><number>0</number></property>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSplitter" name="views">
+           <property name="orientation"><enum>Qt::Vertical</enum></property>
+           <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="messages_layout">
+           <property name="spacing"><number>3</number></property>
+          </layout>
+         </item>
+         <item>
+          <widget class="QLabel" name="result">
+           <property name="text"><string/></property>
+           <property name="wordWrap"><bool>true</bool></property>
+           <property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+           <property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property>
+           <property name="styleSheet"><string>font-family:monospace; font-size:9pt;</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="bottom_bar">
+     <item><widget class="QPushButton" name="b_load"><property name="text"><string>Laden…</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_save"><property name="text"><string>Speichern…</string></property></widget></item>
+     <item>
+      <widget class="QLabel" name="stale">
+       <property name="text"><string/></property>
+       <property name="wordWrap"><bool>true</bool></property>
+       <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
+       <property name="styleSheet"><string>color:#b00; font-weight:bold;</string></property>
+      </widget>
+     </item>
+     <item><widget class="QPushButton" name="b_gcode"><property name="text"><string>G-Code speichern…</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_prog"><property name="text"><string>→ Programm</string></property></widget></item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

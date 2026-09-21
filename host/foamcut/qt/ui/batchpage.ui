@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>BatchPage</class>
+ <widget class="QWidget" name="BatchPage">
+  <layout class="QVBoxLayout" name="page_layout">
+   <item>
+    <widget class="QSplitter" name="split">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <widget class="QWidget" name="left_widget">
+      <layout class="QVBoxLayout" name="left_layout">
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
+       <item><widget class="QLabel" name="list_lbl"><property name="text"><string>Teile (Schnittreihenfolge von oben nach unten; das letzte liegt auf dem Tisch):</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+       <item>
+        <widget class="QListWidget" name="list">
+         <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
+         <property name="textElideMode"><enum>Qt::ElideMiddle</enum></property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="list_buttons">
+         <item><widget class="QPushButton" name="b_add"><property name="text"><string>Teil laden…</string></property></widget></item>
+         <item><widget class="QPushButton" name="b_remove"><property name="text"><string>Entfernen</string></property></widget></item>
+         <item><widget class="QPushButton" name="b_up"><property name="text"><string>↑</string></property><property name="maximumSize"><size><width>36</width><height>16777215</height></size></property></widget></item>
+         <item><widget class="QPushButton" name="b_down"><property name="text"><string>↓</string></property><property name="maximumSize"><size><width>36</width><height>16777215</height></size></property></widget></item>
+         <item><spacer name="list_spacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QGridLayout" name="block_grid">
+         <property name="verticalSpacing"><number>3</number></property>
+       <item row="0" column="0"><widget class="QLabel" name="lbl_block_x"><property name="text"><string>Block Rückseite X [mm]</string></property></widget></item>
+       <item row="0" column="1">
+        <widget class="QLineEdit" name="f_block_x">
+         <property name="maximumSize"><size><width>90</width><height>16777215</height></size></property>
+         <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+        </widget>
+       </item>
+       <item row="0" column="2"><widget class="QLabel" name="help_block_x"><property name="text"><string>wo der Draht in den Block eintaucht</string></property><property name="wordWrap"><bool>true</bool></property><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+       <item row="1" column="0"><widget class="QLabel" name="lbl_table_y"><property name="text"><string>Tischoberkante Y [mm]</string></property></widget></item>
+       <item row="1" column="1">
+        <widget class="QLineEdit" name="f_table_y">
+         <property name="maximumSize"><size><width>90</width><height>16777215</height></size></property>
+         <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+        </widget>
+       </item>
+       <item row="1" column="2"><widget class="QLabel" name="help_table_y"><property name="text"><string>Blockunterkante</string></property><property name="wordWrap"><bool>true</bool></property><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+       <item row="2" column="0"><widget class="QLabel" name="lbl_root_gap"><property name="text"><string>Wurzelseite ab Turm [mm]</string></property></widget></item>
+       <item row="2" column="1">
+        <widget class="QLineEdit" name="f_root_gap">
+         <property name="maximumSize"><size><width>90</width><height>16777215</height></size></property>
+         <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+        </widget>
+       </item>
+       <item row="2" column="2"><widget class="QLabel" name="help_root_gap"><property name="text"><string>Abstand des Blocks vom Turm mit festem Draht</string></property><property name="wordWrap"><bool>true</bool></property><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+       <item row="3" column="0"><widget class="QLabel" name="lbl_gap"><property name="text"><string>Abstand zwischen Teilen [mm]</string></property></widget></item>
+       <item row="3" column="1">
+        <widget class="QLineEdit" name="f_gap">
+         <property name="maximumSize"><size><width>90</width><height>16777215</height></size></property>
+         <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+        </widget>
+       </item>
+       <item row="3" column="2"><widget class="QLabel" name="help_gap"><property name="text"><string>Schaum, der zwischen zwei gestapelten Teilen stehen bleibt</string></property><property name="wordWrap"><bool>true</bool></property><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+       <item row="4" column="0"><widget class="QLabel" name="lbl_block_len"><property name="text"><string>Block Länge X [mm]</string></property></widget></item>
+       <item row="4" column="1">
+        <widget class="QLineEdit" name="f_block_len">
+         <property name="maximumSize"><size><width>90</width><height>16777215</height></size></property>
+         <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+        </widget>
+       </item>
+       <item row="4" column="2"><widget class="QLabel" name="help_block_len"><property name="text"><string>leer = Mindestblock; sonst wird geprüft, ob es passt</string></property><property name="wordWrap"><bool>true</bool></property><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+       <item row="5" column="0"><widget class="QLabel" name="lbl_block_h"><property name="text"><string>Block Höhe Y [mm]</string></property></widget></item>
+       <item row="5" column="1">
+        <widget class="QLineEdit" name="f_block_h">
+         <property name="maximumSize"><size><width>90</width><height>16777215</height></size></property>
+         <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+        </widget>
+       </item>
+       <item row="5" column="2"><widget class="QLabel" name="help_block_h"><property name="text"><string>leer = Mindestblock</string></property><property name="wordWrap"><bool>true</bool></property><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+       <item row="6" column="0"><widget class="QLabel" name="lbl_block_w"><property name="text"><string>Block Breite (Spann) [mm]</string></property></widget></item>
+       <item row="6" column="1">
+        <widget class="QLineEdit" name="f_block_w">
+         <property name="maximumSize"><size><width>90</width><height>16777215</height></size></property>
+         <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+        </widget>
+       </item>
+       <item row="6" column="2"><widget class="QLabel" name="help_block_w"><property name="text"><string>leer = längstes Teil + Rand</string></property><property name="wordWrap"><bool>true</bool></property><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+       <item row="7" column="0"><widget class="QLabel" name="lbl_feed"><property name="text"><string>Drahtvorschub [mm/min]</string></property></widget></item>
+       <item row="7" column="1">
+        <widget class="QLineEdit" name="f_feed">
+         <property name="maximumSize"><size><width>90</width><height>16777215</height></size></property>
+         <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+        </widget>
+       </item>
+       <item row="7" column="2"><widget class="QLabel" name="help_feed"><property name="text"><string>für alle Teile</string></property><property name="wordWrap"><bool>true</bool></property><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+       <widget class="QWidget" name="right_widget">
+        <layout class="QVBoxLayout" name="right_layout">
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <item>
+          <widget class="QGroupBox" name="layer_box">
+           <property name="title"><string>Einblenden</string></property>
+           <layout class="QGridLayout" name="layer_layout">
+            <property name="topMargin"><number>2</number></property>
+            <property name="bottomMargin"><number>2</number></property>
+            <property name="horizontalSpacing"><number>12</number></property>
+            <property name="verticalSpacing"><number>0</number></property>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSplitter" name="views">
+           <property name="orientation"><enum>Qt::Vertical</enum></property>
+           <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="messages_layout">
+           <property name="spacing"><number>3</number></property>
+          </layout>
+         </item>
+         <item>
+          <widget class="QLabel" name="result">
+           <property name="text"><string/></property>
+           <property name="wordWrap"><bool>true</bool></property>
+           <property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+           <property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property>
+           <property name="styleSheet"><string>font-family:monospace; font-size:9pt;</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="bottom_bar">
+     <item><widget class="QPushButton" name="b_load"><property name="text"><string>Liste laden…</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_save"><property name="text"><string>Liste speichern…</string></property></widget></item>
+     <item>
+      <widget class="QLabel" name="stale">
+       <property name="text"><string/></property>
+       <property name="wordWrap"><bool>true</bool></property>
+       <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
+       <property name="styleSheet"><string>color:#b00; font-weight:bold;</string></property>
+      </widget>
+     </item>
+     <item><widget class="QPushButton" name="b_gcode"><property name="text"><string>G-Code speichern…</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_prog"><property name="text"><string>→ Programm</string></property></widget></item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

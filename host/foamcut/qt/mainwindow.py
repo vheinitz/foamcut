@@ -18,6 +18,7 @@ from .programpage import ProgramPage
 from .state import UiState
 from .wingpage import DesignPage
 from .batchpage import BatchPage
+from .uiload import load_ui
 from ..shape import SHAPE_MODEL
 
 
@@ -25,7 +26,7 @@ class MainWindow(QMainWindow):
     def __init__(self, port: str = "auto", baud: int = 115200, machine_path: Path = DEFAULT_PATH,
                  autoconnect: bool = True, state: UiState | None = None):
         super().__init__()
-        self.setWindowTitle("foamcut")
+        load_ui("mainwindow", self)          # nav, stack, log_box, right splitter
         self.machine_path = machine_path
         self.machine = Machine.load_or_none(machine_path) or Machine()
         self.state = state or UiState()
@@ -35,9 +36,6 @@ class MainWindow(QMainWindow):
         self.mpos = {a: 0.0 for a in AXES}; self.wco = {a: 0.0 for a in AXES}
         self.streaming = False
 
-        self.log_box = QPlainTextEdit(); self.log_box.setReadOnly(True); self.log_box.setMaximumBlockCount(2000)
-        self.log_box.setStyleSheet("font-family:monospace; font-size:9pt;")
-
         self.machine_page = MachinePage(self.machine, self.model, self.log)
         self.machine_page.port.setText(port)
         self.wing_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log)
@@ -45,11 +43,6 @@ class MainWindow(QMainWindow):
         self.batch_page = BatchPage(self.machine, Path("airfoil"), self.state, self.log)
         self.program_page = ProgramPage(self.machine, self.state, lambda: self.machine_page.power.value(), self.log)
 
-        self.nav = QListWidget(); self.nav.setFixedWidth(190)
-        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.nav.setStyleSheet("QListWidget{font-size:12pt; background:#1c2540; color:#cfd8ea; padding:6px;}"
-                               "QListWidget::item{padding:10px 8px;} QListWidget::item:selected{background:#2f4370; color:white;}")
-        self.stack = QStackedWidget()
         for title, page in (("Maschine", self.machine_page), ("Flügel", self.wing_page), ("Formen", self.shape_page),
                             ("Schachteln", self.batch_page), ("Programm & Sim", self.program_page)):
             self.nav.addItem(title); self.stack.addWidget(page)
@@ -57,12 +50,7 @@ class MainWindow(QMainWindow):
         self.nav.setCurrentRow(self.state.get("page", 0))
         self.nav.currentRowChanged.connect(lambda i: self.state.set("page", i))
 
-        central = QWidget(); h = QHBoxLayout(central); h.setContentsMargins(0, 0, 0, 0)
-        h.addWidget(self.nav)
-        right = QSplitter(); right.setOrientation(right.orientation().Vertical)
-        right.addWidget(self.stack); right.addWidget(self.log_box); right.setSizes([700, 130])
-        h.addWidget(right, 1)
-        self.setCentralWidget(central)
+        self.right.setSizes([700, 130])
         self.resize(*self.state.get("size", (1400, 880)))
 
         # ---- wiring --------------------------------------------------------

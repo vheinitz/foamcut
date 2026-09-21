@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MachinePage</class>
+ <widget class="QWidget" name="MachinePage">
+  <layout class="QVBoxLayout" name="page_layout">
+   <item>
+    <layout class="QHBoxLayout" name="conn_row">
+<item><widget class="QLabel" name="port_lbl"><property name="text"><string>Port</string></property></widget></item>
+<item><widget class="QLineEdit" name="port"><property name="text"><string>auto</string></property><property name="maximumSize"><size><width>120</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
+<item><widget class="QPushButton" name="b_conn"><property name="text"><string>Verbinden</string></property></widget></item>
+<item><spacer name="conn_spacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+<item><widget class="QLabel" name="pins"><property name="text"><string></string></property><property name="styleSheet"><string>color:#b00; font-size:13pt; font-weight:bold;</string></property></widget></item>
+<item><widget class="QLabel" name="state"><property name="text"><string>nicht verbunden</string></property><property name="styleSheet"><string>font-size:14pt; font-weight:bold; min-width:120px;</string></property></widget></item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="posbox">
+<property name="title"><string>Position (Arbeitskoordinaten, 0 = Referenz)</string></property>
+<layout class="QHBoxLayout" name="pos_layout"/>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="ctl_row">
+<item><widget class="QLabel" name="step_lbl"><property name="text"><string>Schritt</string></property></widget></item>
+<item><layout class="QHBoxLayout" name="steps_layout"/></item>
+<item><spacer name="step_spacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="feed_row">
+<item><widget class="QLabel" name="feed_lbl"><property name="text"><string>Vorschub</string></property></widget></item>
+<item><widget class="QLabel" name="feed_h_lbl"><property name="text"><string>waagerecht X/U</string></property></widget></item>
+<item><widget class="QDoubleSpinBox" name="feed_h"><property name="decimals"><number>0</number></property><property name="minimum"><double>10</double></property><property name="maximum"><double>10000</double></property><property name="singleStep"><double>10</double></property></widget></item>
+<item><widget class="QLabel" name="feed_h_max"><property name="text"><string>mm/min</string></property></widget></item>
+<item><widget class="QLabel" name="feed_v_lbl"><property name="text"><string>   senkrecht Y/V</string></property></widget></item>
+<item><widget class="QDoubleSpinBox" name="feed_v"><property name="decimals"><number>0</number></property><property name="minimum"><double>10</double></property><property name="maximum"><double>10000</double></property><property name="singleStep"><double>10</double></property></widget></item>
+<item><widget class="QLabel" name="feed_v_max"><property name="text"><string>mm/min</string></property></widget></item>
+<item><spacer name="ctl_spacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+    </layout>
+   </item>
+   <item><layout class="QHBoxLayout" name="pads_layout"/></item>
+   <item>
+    <layout class="QHBoxLayout" name="act_row">
+<item><widget class="QPushButton" name="b_stop"><property name="text"><string>STOP</string></property><property name="styleSheet"><string>font-weight:bold; color:#b00;</string></property></widget></item>
+<item><widget class="QPushButton" name="b_unlock"><property name="text"><string>$X entsperren</string></property></widget></item>
+<item><widget class="QPushButton" name="b_reset"><property name="text"><string>Reset</string></property></widget></item>
+<item><widget class="QPushButton" name="b_home"><property name="text"><string>Referenzfahrt ($H)</string></property></widget></item>
+<item><widget class="QPushButton" name="b_homing"><property name="text"><string>Endschalter…</string></property></widget></item>
+<item><spacer name="act_spacer1"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="act_row2">
+<item><widget class="QPushButton" name="b_ref"><property name="text"><string>Referenz hier setzen (0/0/0/0)</string></property></widget></item>
+<item><widget class="QPushButton" name="b_goto"><property name="text"><string>zur Referenz</string></property></widget></item>
+<item><widget class="QLabel" name="travel_lbl"><property name="text"><string>   Verfahrweg = hier:</string></property></widget></item>
+<item><layout class="QHBoxLayout" name="travel_layout"/></item>
+<item><spacer name="act_spacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="wire_box">
+<property name="title"><string>Heizdraht</string></property>
+<layout class="QHBoxLayout" name="wire_layout">
+ <item><widget class="QSlider" name="power"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="maximum"><number>255</number></property><property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Fixed"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property></widget></item>
+ <item><widget class="QLabel" name="power_lbl"><property name="text"><string>S0</string></property><property name="styleSheet"><string>min-width:48px;</string></property></widget></item>
+ <item><widget class="QPushButton" name="b_wire_on"><property name="text"><string>Draht AN</string></property></widget></item>
+ <item><widget class="QPushButton" name="b_wire_off"><property name="text"><string>Draht AUS</string></property></widget></item>
+</layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="cut_box">
+<property name="title"><string>Freischnitt: hinfahren, dann gerade schneiden</string></property>
+<layout class="QGridLayout" name="cut_grid">
+ <item row="0" column="0"><layout class="QHBoxLayout" name="cut_row1">
+  <item><widget class="QLabel" name="cut_len_lbl"><property name="text"><string>Länge</string></property></widget></item><item><widget class="QLineEdit" name="cut_len"><property name="text"><string>100</string></property><property name="maximumSize"><size><width>70</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item><item><widget class="QLabel" name="cut_len_unit"><property name="text"><string>mm</string></property></widget></item>
+  <item><widget class="QLabel" name="cut_feed_lbl"><property name="text"><string>   Vorschub</string></property></widget></item><item><widget class="QLineEdit" name="cut_feed"><property name="text"><string>300</string></property><property name="maximumSize"><size><width>70</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item><item><widget class="QLabel" name="cut_feed_unit"><property name="text"><string>mm/min</string></property></widget></item>
+  <item><widget class="QCheckBox" name="cut_back"><property name="text"><string>und zurück</string></property></widget></item>
+  <item><spacer name="cut_sp1"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+ </layout></item>
+ <item row="1" column="0"><layout class="QHBoxLayout" name="cut_row2">
+  <item><widget class="QPushButton" name="b_cut_fwd"><property name="text"><string>→ vor</string></property></widget></item><item><widget class="QPushButton" name="b_cut_back"><property name="text"><string>← zurück</string></property></widget></item><item><widget class="QPushButton" name="b_cut_up"><property name="text"><string>↑ hoch</string></property></widget></item><item><widget class="QPushButton" name="b_cut_down"><property name="text"><string>↓ runter</string></property></widget></item>
+  <item><widget class="QLabel" name="cut_angle_lbl"><property name="text"><string>   Winkel</string></property></widget></item><item><widget class="QLineEdit" name="cut_angle"><property name="text"><string>0</string></property><property name="maximumSize"><size><width>50</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item><item><widget class="QLabel" name="cut_angle_unit"><property name="text"><string>°</string></property></widget></item><item><widget class="QPushButton" name="b_cut_angle"><property name="text"><string>schräg</string></property></widget></item>
+  <item><spacer name="cut_sp2"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+ </layout></item>
+ <item row="2" column="0"><layout class="QHBoxLayout" name="cut_row3">
+  <item><widget class="QLabel" name="skew_lbl_u"><property name="text"><string>Turm 2 versetzt:  U</string></property></widget></item><item><widget class="QLineEdit" name="skew_u"><property name="text"><string>0</string></property><property name="maximumSize"><size><width>60</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item><item><widget class="QLabel" name="skew_unit_u"><property name="text"><string>mm (Pfeilung ↑↓)</string></property></widget></item>
+  <item><widget class="QLabel" name="skew_lbl_v"><property name="text"><string>   V</string></property></widget></item><item><widget class="QLineEdit" name="skew_v"><property name="text"><string>0</string></property><property name="maximumSize"><size><width>60</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item><item><widget class="QLabel" name="skew_unit_v"><property name="text"><string>mm (Neigung →←)</string></property></widget></item>
+  <item><widget class="QLabel" name="skew_lbl"><property name="text"><string></string></property></widget></item>
+  <item><spacer name="cut_sp3"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+ </layout></item>
+</layout>
+    </widget>
+   </item>
+   <item><spacer name="bottom_spacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>10</height></size></property></spacer></item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

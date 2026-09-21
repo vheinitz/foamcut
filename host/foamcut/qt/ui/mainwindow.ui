@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="windowTitle"><string>foamcut</string></property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="central_layout">
+    <property name="leftMargin"><number>0</number></property>
+    <property name="topMargin"><number>0</number></property>
+    <property name="rightMargin"><number>0</number></property>
+    <property name="bottomMargin"><number>0</number></property>
+    <item>
+     <widget class="QListWidget" name="nav">
+      <property name="minimumSize"><size><width>190</width><height>0</height></size></property>
+      <property name="maximumSize"><size><width>190</width><height>16777215</height></size></property>
+      <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+      <property name="styleSheet"><string>QListWidget{font-size:12pt; background:#1c2540; color:#cfd8ea; padding:6px;} QListWidget::item{padding:10px 8px;} QListWidget::item:selected{background:#2f4370; color:white;}</string></property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QSplitter" name="right">
+      <property name="orientation"><enum>Qt::Vertical</enum></property>
+      <widget class="QStackedWidget" name="stack"/>
+      <widget class="QPlainTextEdit" name="log_box">
+       <property name="readOnly"><bool>true</bool></property>
+       <property name="maximumBlockCount"><number>2000</number></property>
+       <property name="styleSheet"><string>font-family:monospace; font-size:9pt;</string></property>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

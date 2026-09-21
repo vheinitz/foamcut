@@ -4,14 +4,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QProgressBar,
-                             QPushButton, QSlider, QSplitter, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import QFileDialog, QMessageBox, QWidget
 
 from .. import gcode as gc
 from ..machine import Machine
 from ..sim import segments, total_seconds
-from .canvas import C, SimView
+from .canvas import C, SimView, ViewFrame
 from .state import UiState
+from .uiload import load_ui
 
 
 class ProgramPage(QWidget):
@@ -26,44 +26,18 @@ class ProgramPage(QWidget):
         self.segs = []; self.i = 0; self.running = False; self.paused = False
         self.timer = QTimer(self); self.timer.timeout.connect(self._tick)
 
-        v = QVBoxLayout(self)
-        row = QHBoxLayout()
-        b = QPushButton("Datei…"); b.clicked.connect(self.load_file); row.addWidget(b)
-        row.addWidget(QLabel("Format"))
-        self.fmt = QComboBox(); self.fmt.addItems(["auto", *gc.AXIS_PRESETS]); self.fmt.currentTextChanged.connect(lambda _: self.prepare())
-        row.addWidget(self.fmt)
-        self.title = QLabel("kein Programm geladen"); self.title.setStyleSheet("font-size:13pt; font-weight:bold;")
-        row.addWidget(self.title, 1)
-        self.b_start = QPushButton("Start"); self.b_start.setEnabled(False); self.b_start.clicked.connect(self.start)
-        self.b_pause = QPushButton("Pause"); self.b_pause.setEnabled(False); self.b_pause.clicked.connect(self.pause)
-        self.b_stop = QPushButton("STOP"); self.b_stop.setEnabled(False); self.b_stop.clicked.connect(self.stop_requested)
-        self.b_stop.setStyleSheet("font-weight:bold; color:#b00;")
-        for b in (self.b_start, self.b_pause, self.b_stop):
-            row.addWidget(b)
-        v.addLayout(row)
-        self.progress = QProgressBar(); v.addWidget(self.progress)
-        self.line_lbl = QLabel(""); self.line_lbl.setStyleSheet("font-family:monospace;"); v.addWidget(self.line_lbl)
-
-        # ---- simulation ------------------------------------------------
+        load_ui("programpage", self)
+        self.b_file.clicked.connect(self.load_file)
+        self.fmt.addItems(["auto", *gc.AXIS_PRESETS]); self.fmt.currentTextChanged.connect(lambda _: self.prepare())
+        self.b_start.clicked.connect(self.start); self.b_pause.clicked.connect(self.pause)
+        self.b_stop.clicked.connect(self.stop_requested)
+        # the two tower views go into the splitter the .ui reserves for them
         self.v1 = SimView("Turm 1   X →   Y ↑", C["root"])
         self.v2 = SimView("Turm 2   U →   V ↑", C["tip"])
-        split = QSplitter(); split.addWidget(self.v1); split.addWidget(self.v2)
-        v.addWidget(split, 1)
-        sim = QHBoxLayout()
-        sim.addWidget(QLabel("Simulation:"))
-        self.b_run = QPushButton("Start"); self.b_run.clicked.connect(self.sim_run); sim.addWidget(self.b_run)
-        b = QPushButton("Schritt"); b.clicked.connect(self.sim_step); sim.addWidget(b)
-        b = QPushButton("Zurück"); b.clicked.connect(self.sim_reset); sim.addWidget(b)
-        b = QPushButton("Alles sofort"); b.clicked.connect(self.sim_finish); sim.addWidget(b)
-        sim.addSpacing(12); sim.addWidget(QLabel("Tempo"))
-        self.speed = QSlider(Qt.Orientation.Horizontal); self.speed.setRange(1, 100); self.speed.setValue(10); self.speed.setMaximumWidth(160)
-        self.speed_lbl = QLabel("10x"); self.speed.valueChanged.connect(lambda val: self.speed_lbl.setText(f"{val}x"))
-        sim.addWidget(self.speed); sim.addWidget(self.speed_lbl)
-        self.sim_info = QLabel(""); self.sim_info.setStyleSheet("font-family:monospace;")
-        sim.addSpacing(12); sim.addWidget(self.sim_info, 1)
-        v.addLayout(sim)
-        self.notes = QLabel(""); self.notes.setWordWrap(True); self.notes.setStyleSheet("font-family:monospace; font-size:9pt;")
-        v.addWidget(self.notes)
+        self.views.addWidget(ViewFrame(self.v1)); self.views.addWidget(ViewFrame(self.v2))
+        self.b_run.clicked.connect(self.sim_run); self.b_step.clicked.connect(self.sim_step)
+        self.b_reset.clicked.connect(self.sim_reset); self.b_finish.clicked.connect(self.sim_finish)
+        self.speed.valueChanged.connect(lambda val: self.speed_lbl.setText(f"{val}x"))
 
         last = state.get("last_program")
         if last and Path(last).exists():
