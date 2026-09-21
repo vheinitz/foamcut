@@ -32,8 +32,8 @@ class BatchPage(QWidget):
         self.b_add.clicked.connect(self.add_files); self.b_remove.clicked.connect(self.remove)
         self.b_up.clicked.connect(lambda: self.move(-1)); self.b_down.clicked.connect(lambda: self.move(1))
         self.f = {key: getattr(self, f"f_{key}") for key in
-                  ("block_x", "table_y", "root_gap", "gap", "block_len", "block_h", "block_w", "feed")}
-        defaults = {"block_x": "20", "table_y": "20", "root_gap": "150", "gap": "8", "feed": f"{machine.cut_feed:g}"}
+                  ("block_x", "table_y", "root_gap", "gap", "block_len", "block_h", "block_w")}
+        defaults = {"block_x": "20", "table_y": "20", "root_gap": "150", "gap": "8"}
         for key, w in self.f.items():
             w.setText(str(saved.get(key, defaults.get(key, "")))); w.textChanged.connect(self.schedule)
         for f in saved.get("items", []):
@@ -98,7 +98,7 @@ class BatchPage(QWidget):
         self._timer.start(200)
 
     # ---- build ------------------------------------------------------------------
-    def batch(self) -> tuple[Batch, float]:
+    def batch(self) -> Batch:
         def num(key, optional=False):
             t = self.f[key].text().strip().replace(",", ".")
             if optional and not t:
@@ -107,7 +107,7 @@ class BatchPage(QWidget):
         b = Batch(block_x=num("block_x"), table_y=num("table_y"), root_gap=num("root_gap"), gap=num("gap"),
                   block_len=num("block_len", True), block_h=num("block_h", True), block_w=num("block_w", True),
                   items=self.items())
-        return b, num("feed")
+        return b
 
     def _message(self, text, style):
         lab = QLabel(text); lab.setWordWrap(True); lab.setStyleSheet(style); _ignore_width(lab); self.messages.addWidget(lab)
@@ -120,14 +120,14 @@ class BatchPage(QWidget):
         self.state.set("batch", {**{k: w.text() for k, w in self.f.items()},
                                  "items": [{"file": it.file, "pair": it.pair} for it in self.items()]})
         try:
-            batch, feed = self.batch()
+            batch = self.batch()
         except ValueError:
             self._message("Keine Zahl in den Blockfeldern", ERR_STYLE); self.nest = None; self.gcode = ""; return False
         if not batch.items:
             self.result.setText("Teile laden (.wing / .shape), dann werden sie hier gestapelt."); self.nest = None; self.gcode = ""
             self.front.show_path(None, self.machine); self.top.show_path(None); return False
         try:
-            code, nest = generate(batch, self.machine, self.airfoil_dir, feed)
+            code, nest = generate(batch, self.machine, self.airfoil_dir)
         except (WingError, ValueError, OSError) as e:
             self._message(f"Fehler: {e}", ERR_STYLE); self.nest = None; self.gcode = ""
             self.front.show_path(None, self.machine); self.top.show_path(None); return False
@@ -193,7 +193,7 @@ class BatchPage(QWidget):
         p, _ = QFileDialog.getSaveFileName(self, "Liste speichern", self.state.get("last_dir", "gcode"), "batch (*.batch)")
         if p:
             try:
-                b, _ = self.batch()
+                b = self.batch()
             except ValueError:
                 self.log("! Liste nicht gespeichert: keine Zahl in den Blockfeldern"); return
             Path(p).write_text(b.to_text()); self.log(f"Liste gespeichert: {p}")

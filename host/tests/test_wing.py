@@ -38,8 +38,10 @@ LEDNICER = """TEST LEDNICER
 """
 
 
-def machine(gap=800.0, travel=None, fixed=2, kerf=1.0):
+def machine(gap=800.0, travel=None, fixed=2, kerf=1.0, **cut):
     m = Machine()
+    for k, v in cut.items():
+        setattr(m, k, v)
     m.tower_gap_mm = gap
     m.wire_fixed_tower = fixed
     m.kerf_mm = kerf
@@ -353,7 +355,7 @@ def test_extrapolation_is_linear_in_span():
 
 # -------------------------------------------------------------- g-code ----
 def test_generated_gcode_is_valid_and_one_pass():
-    code, path = generate(spec(wire=150), machine(), AIRFOILS)
+    code, path = generate(spec(), machine(wire_power=150), AIRFOILS)
     prog = gc.Program.parse(code)
     assert not prog.errors, prog.errors
     lines = code.splitlines()
@@ -372,8 +374,8 @@ AXES_ORDER = ("X", "Y", "U", "V")
 
 
 def test_feed_is_inverse_time_of_the_faster_plane():
-    s = spec(feed=200.0)
-    code, path = generate(s, machine(kerf=0.0), AIRFOILS)
+    s = spec()
+    code, path = generate(s, machine(kerf=0.0, cut_feed=200.0), AIRFOILS)
     first = [l for l in code.splitlines() if l.startswith("G1 ")][0]
     f = float(first.split("F")[-1])
     seg = max(math.dist(path.entry_root, path.root[0]), math.dist(path.entry_tip, path.tip[0]))
@@ -381,7 +383,7 @@ def test_feed_is_inverse_time_of_the_faster_plane():
 
 
 def test_wire_zero_emits_s1_for_the_gui_slider():
-    code, _ = generate(spec(wire=0), machine(), AIRFOILS)
+    code, _ = generate(spec(), machine(wire_power=0), AIRFOILS)
     assert "M3 S1" in code
 
 

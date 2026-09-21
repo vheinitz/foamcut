@@ -298,7 +298,6 @@ def emit(nest: Nest, feed: float, wire: int, warmup: float) -> str:
     return "\n".join(out) + "\n"
 
 
-def generate(batch: Batch, machine: Machine, airfoil_dir: Path, feed: float, wire: int = 0,
-             warmup: float = 3.0) -> tuple[str, Nest]:
+def generate(batch: Batch, machine: Machine, airfoil_dir: Path) -> tuple[str, Nest]:
     nest = build(batch, machine, airfoil_dir)
-    return emit(nest, feed, wire, warmup), nest
+    return emit(nest, machine.cut_feed, machine.wire_power, machine.warmup_s), nest

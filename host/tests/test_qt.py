@@ -230,7 +230,7 @@ def test_batch_page_stacks_parts_and_hands_over_one_program(win, app, tmp_path):
     assert code.count("; --- ") == 3 and code.count("M3 ") == 1
     # the batch survives a text round trip
     from foamcut.nest import Batch
-    b, _ = bp.batch()
+    b = bp.batch()
     b2 = Batch.parse(b.to_text())
     assert [it.file for it in b2.items] == [str(w1), str(s1)] and b2.items[0].pair and not b2.items[1].pair
     assert b2.gap == 5.0 and b2.block_len is None
@@ -275,6 +275,11 @@ def test_kerf_lives_on_the_machine_page_and_reshapes_the_designs(win, app, tmp_p
     assert "kerf" not in wp.model.template               # no longer a per-part field
     win.machine_page.kerf.setText("x"); win.machine_page.kerf.editingFinished.emit()
     assert win.machine_page.kerf.text() == "3"          # bad input is refused, old value stays
+    win.machine_page.cut_feed.setText("250"); win.machine_page.cut_feed.editingFinished.emit(); app.processEvents()
+    win.machine_page.warmup.setText("5"); win.machine_page.warmup.editingFinished.emit(); app.processEvents()
+    m = Machine.load(tmp_path / "machine.json")
+    assert (m.cut_feed, m.warmup_s) == (250.0, 5.0)
+    assert "G4 P5" in wp.gcode and "F" in wp.gcode      # the wing program carries them
 
 
 def test_homing_dialog_opens_and_validates(win, app):

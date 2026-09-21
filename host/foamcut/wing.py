@@ -89,12 +89,6 @@ FIELDS = [
          "nicht den Block.", "num"),
     ]),
     ("schnitt", "Schnitt", [
-        ("feed", "Drahtvorschub", "mm/min", "200",
-         "Geschwindigkeit des Drahts im Schaum, bezogen auf die schnellere der beiden Schnittebenen.", "num"),
-        ("wire", "Heizleistung S", "1..255", "0",
-         "PWM-Stufe des Heizdrahts. 0 = Wert vom Schieber im Hauptfenster uebernehmen.", "int"),
-        ("warmup", "Aufheizen", "s", "3",
-         "Wartezeit nach dem Einschalten des Drahts, bevor die Fahrt beginnt.", "num"),
         ("points", "Stuetzpunkte je Seite", "", "60",
          "Punkte je Profilseite (oben/unten). Mehr = glatter, mehr G-Code-Zeilen.", "int"),
         ("margin", "Rand", "mm", "10",
@@ -183,9 +177,10 @@ TEMPLATE = _template()
 
 _NUMERIC = {
     "root_chord", "tip_chord", "panel", "area", "taper", "sweep", "washout", "dihedral", "root_gap", "block_x", "te_x",
-    "table_y", "chord_y", "lead", "block_s", "block_w", "block_len", "block_y", "block_h", "feed",
-    "wire", "warmup", "points", "margin", "aileron", "hinge_skin", "hinge_v",
+    "table_y", "chord_y", "lead", "block_s", "block_w", "block_len", "block_y", "block_h",
+    "points", "margin", "aileron", "hinge_skin", "hinge_v",
 }
+_MACHINE_KEYS = {"kerf", "feed", "wire", "warmup"}     # accepted in old files, ignored
 _REQUIRED = {"root_airfoil", "root_chord", "panel", "root_gap", "block_x"}
 
 # The table may come no closer than this to the wire (Y, mm) ...
@@ -240,9 +235,6 @@ class WingSpec:
     block_len: float | None = None
     block_y: float | None = None        # legacy input: the block bottom used to be free, now it is the table
     block_h: float | None = None
-    feed: float = 200.0
-    wire: int = 0
-    warmup: float = 3.0
     points: int = 60
     margin: float = 10.0
     aileron: float = 0.0                # % of chord, 0 = no hinge cut
@@ -263,7 +255,7 @@ class WingSpec:
             key, value = key.strip().lower(), value.strip()
             if key == "side":                       # old files: rechts = Wurzel an Turm 2
                 key, value = "mirror", legacy_side_to_mirror(value)
-            if key == "kerf":                       # old files: the kerf now lives in machine.json
+            if key in _MACHINE_KEYS:                # old files: these live in machine.json now
                 continue
             if not hasattr(spec, key):
                 raise WingError(f"Zeile {n}: unbekannter Parameter {key!r}")
@@ -278,7 +270,7 @@ class WingSpec:
                     num = float(value.replace(",", "."))
                 except ValueError:
                     raise WingError(f"Zeile {n}: {key} braucht eine Zahl, nicht {value!r}") from None
-                setattr(spec, key, int(num) if key in ("points", "wire") else num)
+                setattr(spec, key, int(num) if key == "points" else num)
             else:
                 setattr(spec, key, value)
             seen.add(key)
@@ -303,7 +295,7 @@ class WingSpec:
             spec.tip_airfoil = spec.root_airfoil
         if spec.points < 8:
             raise WingError("points: mindestens 8")
-        for k in ("root_chord", "tip_chord", "panel", "feed"):
+        for k in ("root_chord", "tip_chord", "panel"):
             if getattr(spec, k) <= 0:
                 raise WingError(f"{k} muss > 0 sein")
         if spec.lead < 0 or spec.margin < 0:
@@ -665,9 +657,9 @@ def generate(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> tuple[str, 
         f"{spec.tip_airfoil} {spec.tip_chord:g}, Panel {spec.panel:g}"
         + (", spiegelverkehrt" if spec.mirror else "") + (f", Ruder {spec.aileron:g} %" if spec.aileron > 0 else ""),
         f"; Pfeilung {spec.sweep:g}, Schraenkung {spec.washout:g} deg, Kerf {machine.kerf_mm:g}, "
-        f"Vorschub {spec.feed:g} mm/min",
+        f"Vorschub {machine.cut_feed:g} mm/min",
     ]
-    return emit_gcode(path, spec.feed, spec.wire, spec.warmup, header), path
+    return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header), path
 
 
 def _wing_values_from_file(self, text: str, machine: Machine, airfoil_dir: Path) -> dict[str, str]:

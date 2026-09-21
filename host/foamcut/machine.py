@@ -116,8 +116,11 @@ class Machine:
     wire_fixed_tower: int = 2          # 1 = X/Y, 2 = U/V
     homing: Homing = field(default_factory=Homing)
     jog_feed: float = 750.0     # horizontal jog; vertical is clamped to max_rate
-    cut_feed: float = 300.0
-    wire_power: int = 0
+    # cut settings: one set for wings, shapes, batches and the free cut. They
+    # belong to wire, foam and temperature, not to the part.
+    cut_feed: float = 300.0     # mm/min, referred to the faster of the two cut planes
+    wire_power: int = 0         # PWM 1..255; 0 = the slider in the GUI (S1 placeholder in files)
+    warmup_s: float = 3.0       # wait after M3 before the first move
     # width of the melt channel; one value for wings, shapes and batches - it
     # belongs to wire, power and foam, not to the part (measure a test cut)
     kerf_mm: float = 1.0
