@@ -5,16 +5,16 @@ import copy
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-                             QListWidget, QListWidgetItem, QPushButton, QSplitter, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import QCheckBox, QFileDialog, QLabel, QListWidgetItem, QWidget
 
 from .. import gcode as gc
 from ..machine import Machine
 from ..nest import Batch, Item, generate
 from ..wing import WingError
-from .canvas import LAYERS, FrontView, TopView
+from .canvas import LAYERS, FrontView, TopView, ViewFrame
 from .state import UiState
-from .wingpage import ERR_STYLE, WARN_STYLE
+from .uiload import load_ui
+from .wingpage import ERR_STYLE, LAYER_COLUMNS, WARN_STYLE, _ignore_width
 
 
 class BatchPage(QWidget):
@@ -27,61 +27,32 @@ class BatchPage(QWidget):
         self._timer = QTimer(self); self._timer.setSingleShot(True); self._timer.timeout.connect(self.rebuild)
         saved = state.get("batch", {})
 
-        # ---- left: list of parts + block -----------------------------------
-        left = QWidget(); lv = QVBoxLayout(left); lv.setContentsMargins(0, 0, 0, 0)
-        lv.addWidget(QLabel("Teile (Schnittreihenfolge von oben nach unten; das letzte liegt auf dem Tisch):"))
-        self.list = QListWidget(); lv.addWidget(self.list, 1)
+        load_ui("batchpage", self)
         self.list.itemChanged.connect(self.schedule)
-        row = QHBoxLayout()
-        for text, fn in (("Teil laden…", self.add_files), ("Entfernen", self.remove), ("↑", lambda: self.move(-1)), ("↓", lambda: self.move(1))):
-            b = QPushButton(text); b.clicked.connect(fn); row.addWidget(b)
-        row.addStretch(); lv.addLayout(row)
-        form = QFormLayout(); form.setVerticalSpacing(3)
-        self.f = {}
-        for key, label, default, help_ in (
-                ("block_x", "Block Rückseite X [mm]", "20", "wo der Draht in den Block eintaucht"),
-                ("table_y", "Tischoberkante Y [mm]", "20", "Blockunterkante"),
-                ("root_gap", "Wurzelseite ab Turm [mm]", "150", "Abstand des Blocks vom Turm mit festem Draht"),
-                ("gap", "Abstand zwischen Teilen [mm]", "8", "Schaum, der zwischen zwei gestapelten Teilen stehen bleibt"),
-                ("block_len", "Block Länge X [mm]", "", "leer = Mindestblock; sonst wird geprüft, ob es passt"),
-                ("block_h", "Block Höhe Y [mm]", "", "leer = Mindestblock"),
-                ("block_w", "Block Breite (Spann) [mm]", "", "leer = längstes Teil + Rand"),
-                ("feed", "Drahtvorschub [mm/min]", f"{machine.cut_feed:g}", "für alle Teile")):
-            w = QLineEdit(str(saved.get(key, default))); w.setMaximumWidth(90); w.setAlignment(Qt.AlignmentFlag.AlignRight)
-            w.textChanged.connect(self.schedule); self.f[key] = w
-            r = QWidget(); rl = QHBoxLayout(r); rl.setContentsMargins(0, 0, 0, 0)
-            rl.addWidget(w); h = QLabel(help_); h.setStyleSheet("color:#666; font-size:9pt;"); rl.addWidget(h); rl.addStretch()
-            form.addRow(label, r)
-        lv.addLayout(form)
+        self.b_add.clicked.connect(self.add_files); self.b_remove.clicked.connect(self.remove)
+        self.b_up.clicked.connect(lambda: self.move(-1)); self.b_down.clicked.connect(lambda: self.move(1))
+        self.f = {key: getattr(self, f"f_{key}") for key in
+                  ("block_x", "table_y", "root_gap", "gap", "block_len", "block_h", "block_w", "feed")}
+        defaults = {"block_x": "20", "table_y": "20", "root_gap": "150", "gap": "8", "feed": f"{machine.cut_feed:g}"}
+        for key, w in self.f.items():
+            w.setText(str(saved.get(key, defaults.get(key, "")))); w.textChanged.connect(self.schedule)
         for f in saved.get("items", []):
             self._add_item(f["file"], f.get("pair", False))
 
         # ---- right: drawing, messages, result -------------------------------------
         self.front = FrontView(); self.top = TopView()
+        self.views.addWidget(ViewFrame(self.front)); self.views.addWidget(ViewFrame(self.top)); self.views.setSizes([460, 220])
         shown = state.get("wing_layers", {})
-        bar = QHBoxLayout(); bar.addWidget(QLabel("Einblenden:")); self.layer_boxes = {}
-        for key, text in LAYERS:
+        self.layer_boxes = {}
+        for i, (key, text) in enumerate(LAYERS):
             box = QCheckBox(text); box.setChecked(bool(shown.get(key, True))); box.toggled.connect(self._layers)
-            bar.addWidget(box); self.layer_boxes[key] = box
-        bar.addStretch()
-        self.messages = QVBoxLayout(); self.messages.setSpacing(3); msg = QWidget(); msg.setLayout(self.messages)
-        self.result = QLabel(""); self.result.setStyleSheet("font-family:monospace; font-size:9pt;")
-        right = QWidget(); rv = QVBoxLayout(right); rv.setContentsMargins(0, 0, 0, 0)
-        rv.addLayout(bar)
-        views = QSplitter(Qt.Orientation.Vertical); views.addWidget(self.front); views.addWidget(self.top); views.setSizes([460, 220])
-        rv.addWidget(views, 1); rv.addWidget(msg); rv.addWidget(self.result)
+            self.layer_layout.addWidget(box, i // LAYER_COLUMNS, i % LAYER_COLUMNS); self.layer_boxes[key] = box
         self._layers()
-
-        bottom = QHBoxLayout()
-        b = QPushButton("Liste laden…"); b.clicked.connect(self.load_batch); bottom.addWidget(b)
-        b = QPushButton("Liste speichern…"); b.clicked.connect(self.save_batch); bottom.addWidget(b)
-        self.stale = QLabel(""); self.stale.setStyleSheet("color:#b00; font-weight:bold;")
-        bottom.addSpacing(16); bottom.addWidget(self.stale); bottom.addStretch()
-        b = QPushButton("G-Code speichern…"); b.clicked.connect(self.save_gcode); bottom.addWidget(b)
-        b = QPushButton("→ Programm"); b.clicked.connect(self.to_program); bottom.addWidget(b)
-
-        split = QSplitter(); split.addWidget(left); split.addWidget(right); split.setSizes([560, 820])
-        outer = QVBoxLayout(self); outer.addWidget(split, 1); outer.addLayout(bottom)
+        self.messages = self.messages_layout
+        self.b_load.clicked.connect(self.load_batch); self.b_save.clicked.connect(self.save_batch)
+        self.b_gcode.clicked.connect(self.save_gcode); self.b_prog.clicked.connect(self.to_program)
+        self.split.setSizes([560, 820]); self.split.setStretchFactor(0, 2); self.split.setStretchFactor(1, 3)
+        self.block_grid.setColumnStretch(2, 1)
         QTimer.singleShot(0, self.rebuild)
 
     # ---- list handling ---------------------------------------------------------
@@ -139,7 +110,7 @@ class BatchPage(QWidget):
         return b, num("feed")
 
     def _message(self, text, style):
-        lab = QLabel(text); lab.setWordWrap(True); lab.setStyleSheet(style); self.messages.addWidget(lab)
+        lab = QLabel(text); lab.setWordWrap(True); lab.setStyleSheet(style); _ignore_width(lab); self.messages.addWidget(lab)
 
     def rebuild(self) -> bool:
         while self.messages.count():

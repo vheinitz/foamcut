@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import math
 
-from PyQt6.QtCore import QPointF, QRectF, Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import QWidget
 
 from .. import AXES
+from .uiload import load_ui
 
 # (key, checkbox text) - what the wing views can show or hide, in display order
 LAYERS = [
@@ -28,11 +29,18 @@ C = {
 
 
 class MmCanvas(QWidget):
-    """Fits a mm box into the widget; subclasses implement draw(p)."""
+    """Fits a mm box into the widget; subclasses implement draw(p).
+
+    Title and raster size are not painted here: a ViewFrame shows them in
+    labels above the canvas (`raster_changed` tells it the current step).
+    """
+
+    raster_changed = pyqtSignal(str)
 
     def __init__(self, title: str = "", parent=None):
         super().__init__(parent)
         self.title = title
+        self.step = 0.0
         self.layers = {key: True for key, _ in LAYERS}
         self.box = (0.0, 1.0, 0.0, 1.0)      # xmin, xmax, ymin, ymax in mm
         self.pad = 26
@@ -56,6 +64,10 @@ class MmCanvas(QWidget):
         dx = max(xmax - xmin, 1e-6)
         dy = max(ymax - ymin, 1e-6)
         self.box = (xmin - dx * margin, xmax + dx * margin, ymin - dy * margin, ymax + dy * margin)
+        step = 10.0 if (self.box[1] - self.box[0]) < 300 else 50.0
+        if step != self.step:
+            self.step = step
+            self.raster_changed.emit(f"{step:g} mm Raster")
 
     def _fit(self):
         w, h = max(self.width(), 50), max(self.height(), 50)
@@ -98,7 +110,7 @@ class MmCanvas(QWidget):
 
     def grid(self, p: QPainter, with_axes=True):
         xmin, xmax, ymin, ymax = self.box
-        step = 10.0 if (xmax - xmin) < 300 else 50.0
+        step = self.step or 10.0
         p.setPen(QPen(C["grid"], 1))
         x = math.floor(xmin / step) * step
         while x <= xmax:
@@ -112,25 +124,28 @@ class MmCanvas(QWidget):
             p.setPen(QPen(C["axis"], 1))
             p.drawLine(self.tr(xmin, 0), self.tr(xmax, 0))
             p.drawLine(self.tr(0, ymin), self.tr(0, ymax))
-        p.setPen(QPen(C["axis"]))
-        p.setFont(QFont("Sans", 8))
-        p.drawText(QPointF(self.width() - 90, 14), f"{step:g} mm Raster")
-
-    def header(self, p: QPainter):
-        p.setPen(QPen(C["text"]))
-        p.setFont(QFont("Sans", 10, QFont.Weight.Bold))
-        p.drawText(QPointF(8, 16), self.title)
 
     def paintEvent(self, ev):
         self._fit()
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.draw(p)
-        self.header(p)
         p.end()
 
     def draw(self, p: QPainter):  # pragma: no cover - overridden
         pass
+
+
+class ViewFrame(QWidget):
+    """Header row (title, raster size) above a canvas - see ui/viewframe.ui."""
+
+    def __init__(self, canvas: MmCanvas, parent=None):
+        super().__init__(parent)
+        load_ui("viewframe", self)
+        self.canvas = canvas
+        self.title.setText(canvas.title)
+        self.canvas_layout.addWidget(canvas)
+        canvas.raster_changed.connect(self.raster.setText)
 
 
 class FrontView(MmCanvas):

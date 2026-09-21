@@ -2,15 +2,14 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import (QButtonGroup, QCheckBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout,
-                             QLabel, QLineEdit, QPushButton, QRadioButton, QSlider, QVBoxLayout,
-                             QWidget)
+from PyQt6.QtWidgets import QButtonGroup, QGridLayout, QGroupBox, QLabel, QPushButton, QRadioButton, QSizePolicy, QWidget
 
 from .. import AXES
+from .uiload import load_ui
 from ..jog import HORIZONTAL, STEP_SIZES, VERTICAL, JogModel
 from ..machine import Machine
 
-BIG = "font-size:14pt; font-weight:bold; padding:6px 10px;"
+BIG = "font-size:12pt; font-weight:bold; padding:3px 4px;"
 
 
 class MachinePage(QWidget):
@@ -25,121 +24,63 @@ class MachinePage(QWidget):
     def __init__(self, machine: Machine, model: JogModel, log, parent=None):
         super().__init__(parent)
         self.machine, self.model, self.log = machine, model, log
-        v = QVBoxLayout(self)
-
-        # ---- connection -------------------------------------------------
-        top = QHBoxLayout()
-        top.addWidget(QLabel("Port"))
-        self.port = QLineEdit("auto"); self.port.setMaximumWidth(120)
-        top.addWidget(self.port)
-        self.b_conn = QPushButton("Verbinden"); self.b_conn.clicked.connect(self.connect_toggle)
-        top.addWidget(self.b_conn)
-        top.addStretch()
-        self.pins = QLabel(""); self.pins.setStyleSheet("color:#b00; font-size:13pt; font-weight:bold;")
-        top.addWidget(self.pins)
-        self.state = QLabel("nicht verbunden"); self.state.setStyleSheet("font-size:14pt; font-weight:bold; min-width:120px;")
-        top.addWidget(self.state)
-        v.addLayout(top)
-
-        # ---- position ---------------------------------------------------
-        posbox = QGroupBox("Position (Arbeitskoordinaten, 0 = Referenz)")
-        pl = QHBoxLayout(posbox)
+        load_ui("machinepage", self)
+        self.b_conn.clicked.connect(self.connect_toggle)
+        # position labels, one per axis
         self.pos = {}
         for a in AXES:
-            pl.addWidget(QLabel(a)); lab = QLabel("—"); lab.setStyleSheet("font-family:monospace; font-size:13pt; min-width:90px;")
-            lab.setAlignment(Qt.AlignmentFlag.AlignRight); self.pos[a] = lab; pl.addWidget(lab); pl.addSpacing(20)
-        pl.addStretch()
-        v.addWidget(posbox)
-
-        # ---- step + feeds ----------------------------------------------
-        ctl = QHBoxLayout()
-        ctl.addWidget(QLabel("Schritt"))
+            self.pos_layout.addWidget(QLabel(a))
+            lab = QLabel("—"); lab.setStyleSheet("font-family:monospace; font-size:13pt; min-width:80px;")
+            lab.setAlignment(Qt.AlignmentFlag.AlignRight); self.pos[a] = lab; self.pos_layout.addWidget(lab)
+            self.pos_layout.addSpacing(12)
+        self.pos_layout.addStretch()
+        # step sizes + feeds
         self.steps = QButtonGroup(self)
-        for s in STEP_SIZES:
-            rb = QRadioButton(f"{s:g} mm"); rb.setChecked(s == model.step)
-            self.steps.addButton(rb); ctl.addWidget(rb)
-            rb.toggled.connect(lambda on, s=s: on and setattr(model, "step", s))
-        ctl.addSpacing(20)
-        self.feed_h = self._feed(ctl, "waagerecht X/U", "feed_h", min(machine.max_rate[a] for a in HORIZONTAL))
-        self.feed_v = self._feed(ctl, "senkrecht Y/V", "feed_v", min(machine.max_rate[a] for a in VERTICAL))
-        ctl.addStretch()
-        v.addLayout(ctl)
-
-        # ---- pads -------------------------------------------------------
-        pads = QHBoxLayout()
-        pads.addWidget(self._pad("Turm 1  (X / Y)", "X", "Y"))
-        pads.addWidget(self._both())
-        pads.addWidget(self._pad("Turm 2  (U / V)", "U", "V"))
-        v.addLayout(pads)
-
-        # ---- actions ----------------------------------------------------
-        act = QHBoxLayout()
-        b = QPushButton("STOP"); b.setStyleSheet("font-weight:bold; color:#b00;"); b.clicked.connect(lambda: self.send_raw.emit(b"\x85")); act.addWidget(b)
-        b = QPushButton("$X entsperren"); b.clicked.connect(lambda: self.send_line.emit("$X")); act.addWidget(b)
-        b = QPushButton("Reset"); b.clicked.connect(lambda: self.send_raw.emit(b"\x18")); act.addWidget(b)
-        act.addSpacing(16)
-        self.b_home = QPushButton("Referenzfahrt ($H)"); self.b_home.clicked.connect(self.home_requested)
-        self.b_home.setEnabled(machine.homing.enabled); act.addWidget(self.b_home)
-        b = QPushButton("Endschalter…"); b.clicked.connect(self.homing_dialog); act.addWidget(b)
-        b = QPushButton("Referenz hier setzen (0/0/0/0)"); b.clicked.connect(self.set_reference); act.addWidget(b)
-        b = QPushButton("zur Referenz"); b.clicked.connect(lambda: self.send_line.emit(model.goto_reference())); act.addWidget(b)
-        act.addSpacing(16); act.addWidget(QLabel("Verfahrweg = hier:"))
+        for st in STEP_SIZES:
+            rb = QRadioButton(f"{st:g} mm"); rb.setChecked(st == model.step)
+            self.steps.addButton(rb); self.steps_layout.addWidget(rb)
+            rb.toggled.connect(lambda on, st=st: on and setattr(model, "step", st))
+        self._feed(self.feed_h, self.feed_h_max, "feed_h", min(machine.max_rate[a] for a in HORIZONTAL))
+        self._feed(self.feed_v, self.feed_v_max, "feed_v", min(machine.max_rate[a] for a in VERTICAL))
+        # jog pads
+        self.pads_layout.addWidget(self._pad("Turm 1  (X / Y)", "X", "Y"))
+        self.pads_layout.addWidget(self._both())
+        self.pads_layout.addWidget(self._pad("Turm 2  (U / V)", "U", "V"))
+        # actions
+        self.b_stop.clicked.connect(lambda: self.send_raw.emit(b"\x85"))
+        self.b_unlock.clicked.connect(lambda: self.send_line.emit("$X"))
+        self.b_reset.clicked.connect(lambda: self.send_raw.emit(b"\x18"))
+        self.b_home.clicked.connect(self.home_requested); self.b_home.setEnabled(machine.homing.enabled)
+        self.b_homing.clicked.connect(self.homing_dialog)
+        self.b_ref.clicked.connect(self.set_reference)
+        self.b_goto.clicked.connect(lambda: self.send_line.emit(model.goto_reference()))
         for a in AXES:
-            b = QPushButton(a); b.setMaximumWidth(32); b.clicked.connect(lambda _, a=a: self.save_travel(a)); act.addWidget(b)
-        act.addStretch()
-        v.addLayout(act)
-
-        # ---- hot wire ---------------------------------------------------
-        wire = QGroupBox("Heizdraht")
-        wl = QHBoxLayout(wire)
-        self.power = QSlider(Qt.Orientation.Horizontal); self.power.setRange(0, 255); self.power.setValue(machine.wire_power or 0)
-        self.power_lbl = QLabel(f"S{self.power.value()}"); self.power_lbl.setMinimumWidth(48)
+            b = QPushButton(a); b.setMaximumWidth(32); b.clicked.connect(lambda _, a=a: self.save_travel(a))
+            self.travel_layout.addWidget(b)
+        # hot wire
+        self.power.setValue(machine.wire_power or 0); self.power_lbl.setText(f"S{self.power.value()}")
         self.power.valueChanged.connect(lambda val: self.power_lbl.setText(f"S{val}"))
-        wl.addWidget(self.power, 1); wl.addWidget(self.power_lbl)
-        b = QPushButton("Draht AN"); b.clicked.connect(lambda: self.send_line.emit(model.hotwire(self.power.value()))); wl.addWidget(b)
-        b = QPushButton("Draht AUS"); b.clicked.connect(lambda: self.send_line.emit("M5")); wl.addWidget(b)
-        v.addWidget(wire)
-
-        # ---- straight cut from the current position --------------------------
-        cut = QGroupBox("Freischnitt: hinfahren, dann gerade schneiden")
-        cl = QHBoxLayout()
-        cl.addWidget(QLabel("Länge"))
-        self.cut_len = QLineEdit("100"); self.cut_len.setMaximumWidth(70); self.cut_len.setAlignment(Qt.AlignmentFlag.AlignRight)
-        cl.addWidget(self.cut_len); cl.addWidget(QLabel("mm   Vorschub"))
-        self.cut_feed = QLineEdit(f"{machine.cut_feed:g}"); self.cut_feed.setMaximumWidth(70); self.cut_feed.setAlignment(Qt.AlignmentFlag.AlignRight)
-        cl.addWidget(self.cut_feed); cl.addWidget(QLabel("mm/min"))
-        self.cut_back = QCheckBox("und zurück"); cl.addWidget(self.cut_back)
-        cl.addSpacing(12)
-        for text, angle in (("→ vor", 0.0), ("← zurück", 180.0), ("↑ hoch", 90.0), ("↓ runter", 270.0)):
-            b = QPushButton(text); b.clicked.connect(lambda _, a=angle: self._cut(a)); cl.addWidget(b)
-        cl.addSpacing(12); cl.addWidget(QLabel("Winkel"))
-        self.cut_angle = QLineEdit("0"); self.cut_angle.setMaximumWidth(50); self.cut_angle.setAlignment(Qt.AlignmentFlag.AlignRight)
-        cl.addWidget(self.cut_angle); cl.addWidget(QLabel("°"))
-        b = QPushButton("schräg"); b.clicked.connect(lambda: self._cut(None)); cl.addWidget(b)
-        cl.addStretch()
-        skew = QHBoxLayout(); cut_v = QVBoxLayout(cut); cut_v.addLayout(cl); cut_v.addLayout(skew)
-        v.addWidget(cut)
-        skew.addWidget(QLabel("Turm 2 versetzt:  U"))
-        self.skew_u = QLineEdit("0"); self.skew_u.setMaximumWidth(60); self.skew_u.setAlignment(Qt.AlignmentFlag.AlignRight)
-        skew.addWidget(self.skew_u); skew.addWidget(QLabel("mm  (Pfeilung mit ↑/↓, Winkel = atan(U / Turmabstand))    V"))
-        self.skew_v = QLineEdit("0"); self.skew_v.setMaximumWidth(60); self.skew_v.setAlignment(Qt.AlignmentFlag.AlignRight)
-        skew.addWidget(self.skew_v); skew.addWidget(QLabel("mm  (schiefe Ebene mit →/←)"))
-        self.skew_lbl = QLabel(""); skew.addWidget(self.skew_lbl)
+        self.b_wire_on.clicked.connect(lambda: self.send_line.emit(model.hotwire(self.power.value())))
+        self.b_wire_off.clicked.connect(lambda: self.send_line.emit("M5"))
+        # straight cut
+        self.cut_feed.setText(f"{machine.cut_feed:g}")
+        for b, angle in ((self.b_cut_fwd, 0.0), (self.b_cut_back, 180.0), (self.b_cut_up, 90.0), (self.b_cut_down, 270.0)):
+            b.clicked.connect(lambda _, a=angle: self._cut(a))
+        self.b_cut_angle.clicked.connect(lambda: self._cut(None))
         for w in (self.skew_u, self.skew_v):
             w.textChanged.connect(self._skew_changed)
-        skew.addStretch()
-        v.addStretch()
 
-    def _feed(self, layout, label, attr, maximum):
-        layout.addWidget(QLabel(label))
-        sb = QDoubleSpinBox(); sb.setRange(10, maximum); sb.setSingleStep(10); sb.setDecimals(0)
+    def _feed(self, sb, max_lbl, attr, maximum):
+        sb.setRange(10, maximum)
         sb.setValue(min(getattr(self.model, attr), maximum))
         sb.valueChanged.connect(lambda val: setattr(self.model, attr, val))
-        layout.addWidget(sb); layout.addWidget(QLabel(f"mm/min (max {maximum:g})"))
-        return sb
+        max_lbl.setText(f"mm/min (max {maximum:g})")
 
     def _btn(self, text, moves):
         b = QPushButton(text); b.setStyleSheet(BIG)
+        # Ignored: the label width does not dictate the window width; the pads
+        # share whatever is there, down to this floor
+        b.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred); b.setMinimumWidth(56)
         b.clicked.connect(lambda: self.send_line.emit(self.model.jog(moves)))
         return b
 
@@ -147,7 +88,8 @@ class MachinePage(QWidget):
         box = QGroupBox(title); g = QGridLayout(box)
         g.addWidget(self._btn(f"▲ {v}+", {v: +1}), 0, 1)
         g.addWidget(self._btn(f"◀ {h}−", {h: -1}), 1, 0)
-        lab = QLabel("hinten ◀ ▶ vorne"); lab.setAlignment(Qt.AlignmentFlag.AlignCenter); g.addWidget(lab, 1, 1)
+        lab = QLabel("hinten ◀ ▶ vorne"); lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lab.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred); g.addWidget(lab, 1, 1)
         g.addWidget(self._btn(f"{h}+ ▶", {h: +1}), 1, 2)
         g.addWidget(self._btn(f"▼ {v}−", {v: -1}), 2, 1)
         return box

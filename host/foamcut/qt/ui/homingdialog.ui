@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>HomingDialog</class>
+ <widget class="QDialog" name="HomingDialog">
+  <property name="windowTitle"><string>Endschalter</string></property>
+  <layout class="QVBoxLayout" name="dialog_layout">
+   <item><widget class="QCheckBox" name="enabled"><property name="text"><string>Endschalter verwenden (Referenzfahrt statt Ecke von Hand)</string></property></widget></item>
+   <item><widget class="QLabel" name="hint_wiring"><property name="text"><string>Alle vier Schalter am negativen Ende: X/U hinten, Y/V unten. Verdrahtung: X an X_MIN, Y an X_MAX, U an Y_MIN, V an Y_MAX (Öffner zwischen S und GND), siehe docs/gt2560_pinout.md. Beim Verbinden läuft die Referenzfahrt automatisch; gedrückte Schalter werden vorher 5 mm freigefahren.</string></property><property name="wordWrap"><bool>true</bool></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+   <item>
+    <widget class="QGroupBox" name="switch_box">
+     <property name="title"><string>Schalterart</string></property>
+     <layout class="QVBoxLayout" name="switch_layout">
+      <item><widget class="QRadioButton" name="no"><property name="text"><string>Schließer (NO): offen, bis er gedrückt wird</string></property></widget></item>
+      <item><widget class="QRadioButton" name="nc"><property name="text"><string>Öffner (NC): geschlossen, öffnet beim Drücken - sicherer bei Kabelbruch (Umkehr ist in der Firmware fest, $5 bleibt 0)</string></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="fahrt_box">
+     <property name="title"><string>Fahrt</string></property>
+     <layout class="QFormLayout" name="fahrt_form">
+      <item row="0" column="0"><widget class="QLabel" name="pulloff_lbl"><property name="text"><string>Pull-off [mm]</string></property></widget></item>
+      <item row="0" column="1"><widget class="QLineEdit" name="pulloff"><property name="text"><string>2</string></property><property name="maximumSize"><size><width>80</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
+      <item row="1" column="1"><widget class="QLabel" name="hint_pulloff"><property name="text"><string>So weit fährt jede Achse nach dem Auslösen wieder vom Schalter weg; dort ist die Maschinenposition 'Schalter', bei 0 ist kein Schalter ausgelöst.</string></property><property name="wordWrap"><bool>true</bool></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+      <item row="2" column="0"><widget class="QLabel" name="seek_lbl"><property name="text"><string>Suchgeschwindigkeit [mm/min]</string></property></widget></item>
+      <item row="2" column="1"><widget class="QLineEdit" name="seek"><property name="text"><string>150</string></property><property name="maximumSize"><size><width>80</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
+      <item row="3" column="0"><widget class="QLabel" name="feed_lbl"><property name="text"><string>Referenzgeschwindigkeit [mm/min]</string></property></widget></item>
+      <item row="3" column="1"><widget class="QLineEdit" name="feed"><property name="text"><string>40</string></property><property name="maximumSize"><size><width>80</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
+      <item row="4" column="1"><widget class="QLabel" name="hint_feed"><property name="text"><string>Erste schnelle, dann langsame Anfahrt; die zweite bestimmt die Wiederholgenauigkeit.</string></property><property name="wordWrap"><bool>true</bool></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="axes_box">
+     <property name="title"><string>Achsen</string></property>
+     <layout class="QGridLayout" name="axes_grid"/>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="pins_row">
+     <item><widget class="QPushButton" name="b_pins"><property name="text"><string>Schalterzustand lesen</string></property></widget></item>
+     <item><widget class="QLabel" name="pins"><property name="text"><string/></property><property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property></widget></item>
+    </layout>
+   </item>
+   <item><widget class="QLabel" name="hint_pins"><property name="text"><string>Jeden Schalter von Hand drücken und lesen: genau die richtige Achse muss erscheinen. Erscheint sie losgelassen, ist die Schalterart falsch herum.</string></property><property name="wordWrap"><bool>true</bool></property><property name="styleSheet"><string>color:#666; font-size:9pt;</string></property></widget></item>
+   <item><widget class="QLabel" name="status"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property><property name="styleSheet"><string>color:#b00;</string></property></widget></item>
+   <item>
+    <layout class="QHBoxLayout" name="button_bar">
+     <item><widget class="QPushButton" name="b_home"><property name="text"><string>Referenzfahrt jetzt ($H)</string></property></widget></item>
+     <item><spacer name="bar_spacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+     <item><widget class="QPushButton" name="b_close"><property name="text"><string>Schließen</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_save"><property name="text"><string>Speichern &amp; aufs Board</string></property><property name="default"><bool>true</bool></property></widget></item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

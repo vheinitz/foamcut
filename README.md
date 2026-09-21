@@ -54,7 +54,7 @@ renamed, which is how this build gets real `U` and `V` words.
 | `firmware/grbl5x/overlay/cpu_map_gt2560.h` | the GT2560 pin map for grbl |
 | `config/grbl_settings_foamcut.txt` | `$` settings, commented, with `MACHINE` marking every value you must measure |
 | `host/` | the `foamcut` command line tool and its tests |
-| `host/foamcut/qt/` | the PyQt6 interface; `config/ui_state.json` remembers the last wing values, program and page |
+| `host/foamcut/qt/` | the PyQt6 interface; the masks are Qt Designer files in `qt/ui/*.ui` (loaded with `uic.loadUi`), dynamic widgets such as the mm canvases go into named placeholder layouts/splitters; `config/ui_state.json` remembers the last wing values, program and page |
 | `gcode/` | test programs, from a single axis bounce to a tapered block |
 | `airfoil/` | 295 airfoil `.dat` files (UIUC database via swarfer.co.za) |
 | `config/beispiel.wing` | wing spec template, matches the measured travel |

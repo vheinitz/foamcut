@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ProgramPage</class>
+ <widget class="QWidget" name="ProgramPage">
+  <layout class="QVBoxLayout" name="page_layout">
+   <item>
+    <layout class="QHBoxLayout" name="top_row">
+     <item><widget class="QPushButton" name="b_file"><property name="text"><string>Datei…</string></property></widget></item>
+     <item><widget class="QLabel" name="fmt_lbl"><property name="text"><string>Format</string></property></widget></item>
+     <item><widget class="QComboBox" name="fmt"/></item>
+     <item>
+      <widget class="QLabel" name="title">
+       <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
+       <property name="minimumSize"><size><width>0</width><height>0</height></size></property>
+       <property name="text"><string>kein Programm geladen</string></property>
+       <property name="styleSheet"><string>font-size:13pt; font-weight:bold;</string></property>
+      </widget>
+     </item>
+     <item><widget class="QPushButton" name="b_start"><property name="enabled"><bool>false</bool></property><property name="text"><string>Start</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_pause"><property name="enabled"><bool>false</bool></property><property name="text"><string>Pause</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_stop"><property name="enabled"><bool>false</bool></property><property name="text"><string>STOP</string></property><property name="styleSheet"><string>font-weight:bold; color:#b00;</string></property></widget></item>
+    </layout>
+   </item>
+   <item><widget class="QProgressBar" name="progress"><property name="value"><number>0</number></property></widget></item>
+   <item><widget class="QLabel" name="line_lbl"><property name="text"><string/></property><property name="styleSheet"><string>font-family:monospace;</string></property></widget></item>
+   <item>
+    <widget class="QSplitter" name="views">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="sim_row">
+     <item><widget class="QLabel" name="sim_lbl"><property name="text"><string>Simulation:</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_run"><property name="text"><string>Start</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_step"><property name="text"><string>Schritt</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_reset"><property name="text"><string>Zurück</string></property></widget></item>
+     <item><widget class="QPushButton" name="b_finish"><property name="text"><string>Alles sofort</string></property></widget></item>
+     <item><widget class="QLabel" name="tempo_lbl"><property name="text"><string>Tempo</string></property></widget></item>
+     <item>
+      <widget class="QSlider" name="speed">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <property name="minimum"><number>1</number></property>
+       <property name="maximum"><number>100</number></property>
+       <property name="value"><number>10</number></property>
+       <property name="maximumSize"><size><width>160</width><height>16777215</height></size></property>
+      </widget>
+     </item>
+     <item><widget class="QLabel" name="speed_lbl"><property name="text"><string>10x</string></property></widget></item>
+     <item>
+      <widget class="QLabel" name="sim_info">
+       <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
+       <property name="text"><string/></property>
+       <property name="styleSheet"><string>font-family:monospace;</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="notes">
+     <property name="text"><string/></property>
+     <property name="wordWrap"><bool>true</bool></property>
+     <property name="styleSheet"><string>font-family:monospace; font-size:9pt;</string></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

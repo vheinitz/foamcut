@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ViewFrame</class>
+ <widget class="QWidget" name="ViewFrame">
+  <layout class="QVBoxLayout" name="frame_layout" stretch="0,1">
+   <property name="spacing"><number>2</number></property>
+   <property name="leftMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+   <item>
+    <layout class="QHBoxLayout" name="header_row">
+     <item>
+      <widget class="QLabel" name="title">
+       <property name="text"><string/></property>
+       <property name="styleSheet"><string>font-weight:bold;</string></property>
+       <property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Preferred"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="raster">
+       <property name="text"><string/></property>
+       <property name="styleSheet"><string>color:#9a9a9a; font-size:8pt;</string></property>
+       <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item><layout class="QVBoxLayout" name="canvas_layout"/></item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
