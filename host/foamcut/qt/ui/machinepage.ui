@@ -20,6 +20,17 @@
     </widget>
    </item>
    <item>
+    <layout class="QHBoxLayout" name="geom_row">
+<item><widget class="QLabel" name="gap_lbl"><property name="text"><string>Turmabstand</string></property><property name="toolTip"><string>Abstand der beiden Drahtaufhaengungen (Schlittenebenen), mit dem Massband gemessen. Er skaliert jeden Schnitt.</string></property></widget></item>
+<item><widget class="QLineEdit" name="gap"><property name="text"><string>800</string></property><property name="maximumSize"><size><width>80</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
+<item><widget class="QLabel" name="gap_unit"><property name="text"><string>mm</string></property></widget></item>
+<item><widget class="QLabel" name="fixed_lbl"><property name="text"><string>   Draht fest an</string></property><property name="toolTip"><string>An diesem Turm ist der Heizdraht fest eingespannt; am anderen zieht das Gewicht ueber die Rolle. Nur das feste Ende ist ein genauer Bezug, deshalb liegt die Wurzel immer dort.</string></property></widget></item>
+<item><widget class="QComboBox" name="fixed"/></item>
+<item><widget class="QLabel" name="travel_show"><property name="text"><string/></property><property name="styleSheet"><string>color:#666;</string></property></widget></item>
+<item><spacer name="geom_spacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+    </layout>
+   </item>
+   <item>
     <layout class="QHBoxLayout" name="ctl_row">
 <item><widget class="QLabel" name="step_lbl"><property name="text"><string>Schritt</string></property></widget></item>
 <item><layout class="QHBoxLayout" name="steps_layout"/></item>
