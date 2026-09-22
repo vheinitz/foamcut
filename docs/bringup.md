@@ -258,6 +258,25 @@ Y=105 U=160 V=105`, `foamcut homing show`, `foamcut home`.
 Die Phasen `reference` und `travel` von `foamcut setup` sind nur für Maschinen
 ohne Schalter.
 
+## Halber Weg auf einer Achse: Schritte/mm
+
+Fährt eine Achse **bei jeder Geschwindigkeit gleich falsch** (z. B. nur den
+halben Weg), stimmen die Schritte/mm nicht — fast immer, weil der Treiber in
+einem anderen Mikroschritt läuft als angenommen (U war so: 1600 → 3200; Y/V
+am 2026-09-23: 8704 → 17408). Sind die Fehler dagegen nur bei hohem Vorschub
+da, verliert die Achse Schritte, dann ist die Schrittrate zu hoch.
+
+```bash
+foamcut machine set --steps Y=17408 --steps V=17408   # neu = alt * befohlen / gemessen
+```
+
+Der Wert landet in `machine.json` und beim nächsten Verbinden auf dem Board.
+Achtung: doppelte Schritte/mm halbieren den möglichen Vorschub (20 kHz
+Schrittbudget, `MAX_STEP_HZ`) — `machine set` sagt, worauf es kappt. Wer die
+Geschwindigkeit behalten will, stellt stattdessen den Treiber zurück auf den
+angenommenen Mikroschritt (Jumper MS1/MS2 unter dem Treiber) und lässt den
+alten Wert stehen.
+
 ## The feed rate surprise
 
 This build sets `N_AXIS_LINEAR = 4`, so grbl applies the feed rate to the

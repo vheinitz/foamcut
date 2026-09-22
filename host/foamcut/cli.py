@@ -387,6 +387,16 @@ def cmd_machine(args) -> int:
             m.wire_power = args.wire
         if args.warmup is not None:
             m.warmup_s = args.warmup
+        for item in args.steps or []:
+            a, _, v = item.partition("=")
+            a = a.strip().upper()
+            try:
+                if a not in AXES or float(v) <= 0:
+                    raise ValueError
+            except ValueError:
+                print(f"error: --steps erwartet ACHSE=WERT, z.B. Y=17408 (nicht {item!r})", file=sys.stderr)
+                return 2
+            m.steps_per_mm[a] = float(v)
         if args.kerf is not None:
             if args.kerf < 0:
                 print("error: kerf muss >= 0 sein", file=sys.stderr)
@@ -400,6 +410,8 @@ def cmd_machine(args) -> int:
           "dort liegt die Fluegelwurzel")
     print(f"Schnitt: Vorschub {m.cut_feed:g} mm/min, Draht S{m.wire_power} (0 = GUI-Schieber), "
           f"Aufheizen {m.warmup_s:g} s, Schnittbreite (Kerf) {m.kerf_mm:g} mm")
+    for note in m.clamp_rates():
+        print("  " + note)
     print("Schritte/mm:", "  ".join(f"{a} {m.steps_per_mm[a]:g}" for a in AXES))
     print("Max mm/min: ", "  ".join(f"{a} {m.max_rate[a]:g}" for a in AXES))
     print("Verfahrweg: ", "  ".join(f"{a} {m.travel_mm[a]:g}" for a in AXES))
@@ -812,6 +824,9 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--feed", type=float, help="Drahtvorschub mm/min (schnellere Schnittebene)")
     c.add_argument("--wire", type=int, help="Heizleistung S 1..255, 0 = GUI-Schieber")
     c.add_argument("--warmup", type=float, help="Aufheizzeit in s vor der ersten Fahrt")
+    c.add_argument("--steps", action="append", metavar="ACHSE=WERT",
+                   help="Schritte/mm einer Achse, z.B. --steps Y=17408 (mehrfach moeglich); "
+                        "neu = alt * befohlen / gemessen")
     c.set_defaults(func=cmd_machine)
 
     c = sub.add_parser("jogpad", help="keyboard jogging")
