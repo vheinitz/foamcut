@@ -412,7 +412,7 @@ class MeshView(QWidget):
         super().__init__(parent)
         self.tris: list = []
         self.axis = 2; self.up = 1
-        self.z0 = self.z1 = 0.0; self.planes: list[float] = []
+        self.slabs: list[tuple[float, float]] = []; self.planes: list[float] = []
         self.yaw, self.pitch = 0.6, 0.35
         self.zoom = 1.0
         self._last = None
@@ -422,7 +422,7 @@ class MeshView(QWidget):
         self.setToolTip("Ziehen dreht, Rad zoomt")
 
     def set_object(self, data):
-        self.tris, self.axis, self.up, self.z0, self.z1, self.planes = data
+        self.tris, self.axis, self.up, self.slabs, self.planes = data
         self._prep()
         self.update()
 
@@ -467,7 +467,7 @@ class MeshView(QWidget):
             shade = max(0.0, (nx * light[0] + ny * light[1] + nz * light[2]) / ln)
             zc = sum(v[self.axis] for v in t) / 3
             depth = sum(q[2] for q in r) / 3
-            faces.append((depth, shade, self.z0 - 1e-6 <= zc <= self.z1 + 1e-6, t))
+            faces.append((depth, shade, any(z0 - 1e-6 <= zc <= z1 + 1e-6 for z0, z1 in self.slabs), t))
         faces.sort(key=lambda f: f[0])
         p.setPen(Qt.PenStyle.NoPen)
         from PyQt6.QtGui import QPolygonF
@@ -490,7 +490,8 @@ class MeshView(QWidget):
                 corners.append(self._tr(v))
             p.drawPolygon(QPolygonF(corners))
         p.setPen(QPen(C["text"])); p.setFont(QFont("Sans", 9))
-        p.drawText(QPointF(8, 16), f"{len(self.tris)} Dreiecke, Scheibe {self.z0:.0f}..{self.z1:.0f} markiert; ziehen = drehen")
+        marked = ", ".join(f"{a:.0f}..{b:.0f}" for a, b in self.slabs) or "keine"
+        p.drawText(QPointF(8, 16), f"{len(self.tris)} Dreiecke, markiert {marked}; ziehen = drehen")
         p.end()
 
     def mousePressEvent(self, ev):

@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import math
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import geom
-from .contour import classify, plan
+from .contour import CLEARANCE, Part, classify, part_from_outline, route_parts
 from .machine import Machine
-from .wing import (Model, WingError, WingPath, _template, emit_gcode, from_text, inverted, loft, to_text)
+from .wing import (Model, WingError, WingPath, _template, contour_moves, from_text, inverted, job_line, loft, to_text)
 
 Point = tuple[float, float]
 Tri = tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]
@@ -40,7 +40,11 @@ FIELDS = [
         ("mirror", "Spiegeln", "ja/nein", "nein", "Querschnitt in X spiegeln.", "bool"),
         ("thickness", "Scheibendicke", "mm", "40",
          "Dicke jeder Scheibe = Blockdicke. Anzahl der Scheiben folgt aus der Laenge des Koerpers.", "num"),
-        ("index", "Scheibe Nr.", "", "1", "Welche Scheibe geschnitten wird, 1 = am Anfang der Achse.", "int"),
+        ("index", "Scheiben", "", "1",
+         "Welche Scheiben geschnitten werden, 1 = am Anfang der Achse: eine Nummer, Liste '2,3,4', Bereich '1-5' "
+         "oder 'alle'. Mehrere Scheiben werden nebeneinander auf der Platte angeordnet; passen nicht alle, "
+         "haelt das Programm an (M0) und verlangt die naechste Platte.", "text"),
+        ("gap", "Abstand", "mm", "6", "Schaum, der zwischen zwei Scheiben auf der Platte stehen bleibt.", "num"),
         ("loft", "Verlaufend", "ja/nein", "ja",
          "ja: Seite A = Schnitt am Anfang der Scheibe, Seite B = am Ende, der Draht schneidet die "
          "Flaeche dazwischen (glatt). nein: Querschnitt in der Scheibenmitte, beide Seiten gleich (Stufen).", "bool"),
@@ -77,14 +81,16 @@ FIELDS = [
     ("block", "Block", [
         ("block_s", "Block Anfang ab Seite A", "mm", "", "0 oder leer = der Block beginnt an Seite A.", "num"),
         ("block_w", "Block Breite", "mm", "", "Ausdehnung in Spannrichtung. Leer = Dicke plus Rand.", "num"),
-        ("block_len", "Block Laenge", "mm", "", "Leer = Mindestblock.", "num"),
-        ("block_h", "Block Hoehe", "mm", "", "Ab Tischoberkante. Leer = Mindestblock.", "num"),
+        ("block_len", "Platte Laenge", "mm", "",
+         "Laenge der Schaumplatte in X ab der Rueckseite. Leer = so viel, wie der Verfahrweg hergibt.", "num"),
+        ("block_h", "Platte Hoehe", "mm", "",
+         "Hoehe der Platte ab Tischoberkante. Leer = so viel, wie der Verfahrweg hergibt.", "num"),
     ]),
 ]
 
-TEMPLATE = _template(FIELDS, ("; Scheibe eines 3D-Koerpers (STL) fuer den Schaumschneider.",
+TEMPLATE = _template(FIELDS, ("; Scheiben eines 3D-Koerpers (STL) fuer den Schaumschneider, auf Platten der Scheibendicke.",
                               "; Alle Masse in mm. Zeilen mit ; sind Kommentare."))
-_NUMERIC = {"scale", "thickness", "index", "points", "spar_x", "spar_y", "spar_w", "tab", "root_gap", "block_x", "table_y", "lead", "margin",
+_NUMERIC = {"scale", "thickness", "gap", "points", "spar_x", "spar_y", "spar_w", "tab", "root_gap", "block_x", "table_y", "lead", "margin",
             "block_s", "block_w", "block_len", "block_h"}
 _MACHINE_KEYS = {"kerf", "feed", "wire", "warmup"}
 _REQUIRED = {"stl", "thickness", "root_gap", "block_x", "table_y"}
@@ -99,7 +105,8 @@ class SliceSpec:
     up: str = "y"
     mirror: bool = False
     thickness: float = 40.0
-    index: int = 1
+    index: str = "1"
+    gap: float = 6.0
     loft: bool = True
     points: int = 120
     spar_side: str = "keine"
@@ -162,7 +169,7 @@ class SliceSpec:
                     num = float(value.replace(",", "."))
                 except ValueError:
                     raise WingError(f"Zeile {n}: {key} braucht eine Zahl, nicht {value!r}") from None
-                setattr(spec, key, int(num) if key in ("index", "points") else num)
+                setattr(spec, key, int(num) if key == "points" else num)
             else:
                 setattr(spec, key, value)
             seen.add(key)
@@ -171,8 +178,8 @@ class SliceSpec:
             raise WingError("fehlt: " + ", ".join(sorted(missing)))
         if spec.thickness <= 0 or spec.scale <= 0:
             raise WingError("thickness und scale muessen > 0 sein")
-        if spec.index < 1:
-            raise WingError("index: Scheiben zaehlen ab 1")
+        if spec.gap < 0:
+            raise WingError("gap darf nicht negativ sein")
         if spec.axis == spec.up:
             raise WingError("axis und up muessen verschiedene Achsen sein")
         if spec.points < 12:
@@ -428,69 +435,263 @@ def _pair_loft(a_loops, b_loops, n: int, kerf: float, spar=None) -> tuple[list[P
     return path_for(A, keys), path_for(B, keys_b_ordered if keys else None)
 
 
-def build_path(spec: SliceSpec, machine: Machine) -> WingPath:
-    tris, zmin, zmax, count = _body(spec)
-    if spec.index > count:
-        raise WingError(f"Scheibe {spec.index} gibt es nicht: {count} Scheiben zu {spec.thickness:g} mm "
-                        f"({spec.axis} von {zmin:.1f} bis {zmax:.1f})")
+def parse_indices(text: str, count: int) -> list[int]:
+    """'3', '2,3,4', '1-5', 'alle' -> slab numbers, 1-based, in the order given."""
+    t = text.strip().lower()
+    if t in ("alle", "all", "*"):
+        return list(range(1, count + 1))
+    out: list[int] = []
+    for tok in t.replace(";", ",").split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if "-" in tok:
+            a, _, b = tok.partition("-")
+            try:
+                lo, hi = int(a), int(b)
+            except ValueError:
+                raise WingError(f"Scheiben: {tok!r} ist kein Bereich") from None
+            out.extend(range(lo, hi + 1))
+        else:
+            try:
+                out.append(int(float(tok)))
+            except ValueError:
+                raise WingError(f"Scheiben: {tok!r} ist keine Nummer") from None
+    if not out:
+        raise WingError("Scheiben: keine Nummer angegeben")
+    bad = [n for n in out if n < 1 or n > count]
+    if bad:
+        raise WingError(f"Scheibe {bad[0]} gibt es nicht: {count} Scheiben ({'1' if count == 1 else '1..' + str(count)})")
+    return out
+
+
+@dataclass
+class Slab:
+    """One slice of the body as a cut part in body coordinates."""
+    index: int
+    z0: float
+    z1: float
+    parts: list[Part]               # one per outline (prismatic) or one lofted piece
+    size: tuple[float, float]       # bounding box of all hulls, w x h
+    origin: tuple[float, float]     # bounding box min corner (body coordinates)
+    notes: list[str] = field(default_factory=list)
+
+    def shifted(self, dx: float, dy: float) -> list[Part]:
+        mv = lambda pts: [(x + dx, y + dy) for x, y in pts]
+        return [Part(mv(p.a), mv(p.b), mv(p.hull), p.label) for p in self.parts]
+
+
+def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int) -> Slab:
     k, i, j = _frame(spec)
-    z0 = zmin + (spec.index - 1) * spec.thickness
+    z0 = zmin + (index - 1) * spec.thickness
     z1 = min(z0 + spec.thickness, zmax)
-    notes_extra: list[str] = []
+    notes: list[str] = []
     if spec.loft:
         a = _orient(_section_at(tris, k, z0, i, j, zmin, zmax), spec.mirror)
         b = _orient(_section_at(tris, k, z1, i, j, zmin, zmax), spec.mirror)
         pa, pb = _pair_loft(a, b, spec.points, machine.kerf_mm, _spar(spec))
-        loops_all = a + b
-        rear = min(min(q[0] for q in pa), min(q[0] for q in pb))
-        shift = spec.block_x + spec.lead - rear
-        y0 = pa[0][1]
-        pa = [(x + shift, y - y0) for x, y in pa]
-        pb = [(x + shift, y - y0) for x, y in pb]
-        path = loft(spec, pa, pb, machine)
+        hull = geom.grow(geom.convex_hull(pa + pb), CLEARANCE)
+        parts = [Part(pa, pb, hull, f"Scheibe {index}")]
         kind = "verlaufend"
-        if spec.tab > 0:
-            notes_extra.append("Haltesteg nur beim prismatischen Schnitt - hier ohne")
-        # sides of different size: the wire lines converge and cross somewhere
-        # beyond the smaller side; at a tower past that point the contour is inverted
-        n = spec.points + 1
-        for tower, pts in ((1, path.tower1), (2, path.tower2)):
-            if inverted(path.root[:n], pts[:n]):
-                path.notes.append(f"Drahtlinien kreuzen sich vor Turm {tower} - dort darf kein Schaum liegen; "
-                                  "duennere Scheiben oder 'loft = nein' helfen")
+        # how far the straight wire strays from the true, curved skin between the faces
+        mid = _orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror)
+        sag = _sagitta(pa, pb, mid)
+        if sag is not None:
+            notes.append(f"Scheibe {index}: Sehnenfehler max {sag:.2f} mm (gerader Draht gegen die runde Haut)")
     else:
         mid = _orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror)
         mid, _ = _prepare(mid, _spar(spec))
-        loops_all = mid
-        rear = min(q[0] for l in mid for q in l)
-        shift = spec.block_x + spec.lead - rear
-        mid = [[(x + shift, y) for x, y in l] for l in mid]
-        pts, notes_extra = plan(mid, machine.kerf_mm, spec.block_x, spec.tab)
-        y0 = pts[0][1]
-        rel = [(x, y - y0) for x, y in pts]
-        path = loft(spec, rel, list(rel), machine)
+        outlines = classify(mid, machine.kerf_mm)
+        parts = [part_from_outline(o, spec.tab, f"Scheibe {index}") for o in outlines]
         kind = "prismatisch"
-    xs = [q[0] for l in loops_all for q in l]; ys = [q[1] for l in loops_all for q in l]
-    path.notes.insert(1, f"Scheibe {spec.index} von {count} ({spec.axis} = {z0:.1f}..{z1:.1f} von {zmin:.1f}..{zmax:.1f}), "
-                         f"{kind}, Querschnitt {max(xs) - min(xs):.1f} x {max(ys) - min(ys):.1f} mm, "
-                         f"{Path(spec.stl).name}")
+    xs = [q[0] for p in parts for q in p.a + p.b]; ys = [q[1] for p in parts for q in p.a + p.b]
+    notes.insert(0, f"Scheibe {index} von {count} ({spec.axis} = {z0:.1f}..{z1:.1f}), {kind}, "
+                    f"{max(xs) - min(xs):.1f} x {max(ys) - min(ys):.1f} mm")
+    return Slab(index, z0, z1, parts, (max(xs) - min(xs), max(ys) - min(ys)), (min(xs), min(ys)), notes)
+
+
+def _sagitta(pa: list[Point], pb: list[Point], mid_loops: list[list[Point]]) -> float | None:
+    """Largest distance from the true mid section to the straight-wire
+    surface (the mean of both face paths) - the error of one slab."""
+    if not mid_loops:
+        return None
+    n = min(len(pa), len(pb))
+    chord = [((pa[i][0] + pb[i][0]) / 2, (pa[i][1] + pb[i][1]) / 2) for i in range(n)]
+    big = max(mid_loops, key=lambda l: abs(geom.signed_area(l)))
+    worst = 0.0
+    for q in big[::max(1, len(big) // 60)]:
+        d = min(_seg_dist(q, chord[i], chord[i + 1]) for i in range(n - 1))
+        worst = max(worst, d)
+    return worst
+
+
+def _seg_dist(p: Point, a: Point, b: Point) -> float:
+    ax, ay = b[0] - a[0], b[1] - a[1]
+    l2 = ax * ax + ay * ay
+    t = 0.0 if l2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * ax + (p[1] - a[1]) * ay) / l2))
+    return math.dist(p, (a[0] + ax * t, a[1] + ay * t))
+
+
+def _usable(spec: SliceSpec, machine: Machine) -> tuple[float, float]:
+    """Width (X) and height (Y) of the board area the pieces may occupy."""
+    if spec.block_len is not None:
+        w = spec.block_len - spec.lead - spec.margin
+    elif machine.has_travel():
+        w = min(machine.travel_mm["X"], machine.travel_mm["U"]) - spec.margin - spec.block_x - spec.lead
+    else:
+        raise WingError("Plattenlaenge (block_len) angeben - der Verfahrweg ist nicht gemessen")
+    if spec.block_h is not None:
+        h = spec.block_h - 2 * spec.margin
+    elif machine.has_travel():
+        h = min(machine.travel_mm["Y"], machine.travel_mm["V"]) - spec.table_y - 2 * spec.margin
+    else:
+        raise WingError("Plattenhoehe (block_h) angeben - der Verfahrweg ist nicht gemessen")
+    if w <= 0 or h <= 0:
+        raise WingError("kein Platz auf der Platte: Laenge/Hoehe, Rand, Einlauf und Tisch pruefen")
+    return w, h
+
+
+def pack(slabs: list[Slab], w: float, h: float, gap: float) -> list[list[tuple[Slab, float, float]]]:
+    """Shelf packing, rows from the bottom, tallest first; a slab that does
+    not fit the current board starts the next. Returns per board
+    [(slab, dx, dy)] with the offsets that move the slab's bounding-box
+    corner to its place (area coordinates, origin bottom-rear)."""
+    order = sorted(slabs, key=lambda s: -s.size[1])
+    boards: list[list[tuple[Slab, float, float]]] = []
+    for s in order:
+        sw, sh = s.size
+        if sw > w + 1e-6 or sh > h + 1e-6:
+            raise WingError(f"Scheibe {s.index} ({sw:.0f} x {sh:.0f} mm) passt nicht auf die Platte ({w:.0f} x {h:.0f} nutzbar)")
+        placed = False
+        for board in boards:
+            # rows: y of the shelf, its height, the x cursor
+            rows = board_rows(board, gap)
+            for ry, rh, rx in rows:
+                if sh <= rh + 1e-6 and rx + sw <= w + 1e-6:
+                    board.append((s, rx, ry)); placed = True; break
+            if placed:
+                break
+            top = max((ry + rh for ry, rh, _ in rows), default=-gap) + gap
+            if top + sh <= h + 1e-6:
+                board.append((s, 0.0, top)); placed = True; break
+        if not placed:
+            boards.append([(s, 0.0, 0.0)])
+    return boards
+
+
+def board_rows(board: list[tuple[Slab, float, float]], gap: float) -> list[tuple[float, float, float]]:
+    rows: dict[float, list[tuple[Slab, float, float]]] = {}
+    for s, dx, dy in board:
+        rows.setdefault(dy, []).append((s, dx, dy))
+    out = []
+    for ry, items in sorted(rows.items()):
+        rh = max(s.size[1] for s, _, _ in items)
+        rx = max(dx + s.size[0] for s, dx, _ in items) + gap
+        out.append((ry, rh, rx))
+    return out
+
+
+@dataclass
+class Board:
+    number: int
+    path: WingPath
+    slabs: list[int]
+    size: tuple[float, float]           # used area w x h
+
+
+def build_boards(spec: SliceSpec, machine: Machine) -> tuple[list[Board], list[str]]:
+    tris, zmin, zmax, count = _body(spec)
+    indices = parse_indices(spec.index, count)
+    slabs = [_slab(spec, machine, tris, zmin, zmax, count, n) for n in indices]
+    w, h = _usable(spec, machine)
+    boards: list[Board] = []
+    notes: list[str] = []
+    x0 = spec.block_x + spec.lead                     # rear edge of the usable area
+    for b, placed in enumerate(pack(slabs, w, h, spec.gap), start=1):
+        parts: list[Part] = []
+        for s, dx, dy in placed:
+            parts.extend(s.shifted(x0 + dx - s.origin[0], dy - s.origin[1]))
+        entry = (spec.block_x, parts[0].a[0][1]) if len(placed) == 1 and len(parts) == 1 else (spec.block_x, 0.0)
+        pa, pb, order = route_parts(parts, entry)
+        y0 = entry[1]
+        pa = [(x, y - y0) for x, y in pa]; pb = [(x, y - y0) for x, y in pb]
+        path = loft(spec, pa, pb, machine)
+        used_w = max(dx + s.size[0] for s, dx, _ in placed)
+        used_h = max(dy + s.size[1] for s, _, dy in placed)
+        nums = sorted(s.index for s, _, _ in placed)
+        boards.append(Board(b, path, nums, (used_w, used_h)))
+        notes.append(f"Platte {b}: Scheiben {', '.join(map(str, nums))} in Schnittreihenfolge "
+                     f"{', '.join(parts[k].label.split()[-1] for k in order)}; belegt {used_w:.0f} x {used_h:.0f} mm "
+                     f"von {w:.0f} x {h:.0f} nutzbar")
+    for s in slabs:
+        notes.extend(s.notes)
+    return boards, notes
+
+
+def build_path(spec: SliceSpec, machine: Machine) -> WingPath:
+    boards, notes = build_boards(spec, machine)
+    path = boards[0].path
+    tris, zmin, zmax, count = _body(spec)
+    path.notes.insert(1, f"Scheiben aus {Path(spec.stl).name}: {count} zu {spec.thickness:g} mm "
+                         f"({spec.axis} {zmin:.1f}..{zmax:.1f}), {'verlaufend' if spec.loft else 'prismatisch'}, "
+                         f"{len(boards)} Platte(n) zu {spec.thickness:g} mm Dicke")
+    if spec.loft:
+        # sides of different size: the wire lines converge and cross somewhere
+        # beyond the smaller side; at a tower past that point the contour is inverted
+        for tower, pts in ((1, path.tower1), (2, path.tower2)):
+            if inverted(path.root, pts):
+                path.notes.append(f"Drahtlinien kreuzen sich vor Turm {tower} - dort darf kein Schaum liegen; "
+                                  "duennere Scheiben oder 'loft = nein' helfen")
+        if spec.tab > 0:
+            notes.append("Haltesteg nur beim prismatischen Schnitt - hier ohne")
     if spec.spar_side != "keine":
-        path.notes.append(f"Holmnut von {spec.spar_side}: Mitte X={spec.spar_x:g}, Grund Y={spec.spar_y:g}, "
-                          f"Breite {spec.spar_w:g} (Koerperkoordinaten)")
-    path.notes.extend(notes_extra)
+        notes.append(f"Holmnut von {spec.spar_side}: Mitte X={spec.spar_x:g}, Grund Y={spec.spar_y:g}, "
+                     f"Breite {spec.spar_w:g} (Koerperkoordinaten)")
+    path.notes.extend(notes)
+    path.boards = boards
     return path
 
 
 def generate(spec: SliceSpec, machine: Machine, airfoil_dir: Path | None = None) -> tuple[str, WingPath]:
     path = build_path(spec, machine)
-    header = ["; foamcut slice: " + path.notes[1],
-              f"; Kerf {machine.kerf_mm:g}, Vorschub {machine.cut_feed:g} mm/min"]
-    return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header), path
+    boards = path.boards
+    feed, wire, warmup = machine.cut_feed, machine.wire_power, machine.warmup_s
+    s_wire = wire if wire > 0 else 1
+    out = ["; foamcut slice: " + path.notes[1],
+           f"; Kerf {machine.kerf_mm:g}, Vorschub {feed:g} mm/min",
+           "; " + path.notes[0], "G21 ; mm", "G90 ; absolut", "G94",
+           f"M3 S{s_wire}" + (" ; Drahtleistung vom GUI-Schieber" if wire <= 0 else ""),
+           f"G4 P{warmup:g} ; aufheizen"]
+    total = 0.0
+    for b in boards:
+        p = b.path
+        if b.number > 1:
+            out += [f"G0 Y{p.entry_t1[1]:.3f} V{p.entry_t2[1]:.3f} ; Hoehe fuer Platte {b.number}",
+                    f"M0 ; PLATTE {b.number} EINLEGEN: Scheiben {', '.join(map(str, b.slabs))}, Rueckseite X={p.block[0]:g}, "
+                    f"unten Y={p.table_y:g}, mind. {p.min_block[2]:.0f} x {p.min_block[3]:.0f} x {p.min_block[5]:.0f} mm - dann Weiter",
+                    f"M3 S{s_wire}", f"G4 P{warmup:g} ; aufheizen"]
+        else:
+            out.append(f"G0 Y{p.entry_t1[1]:.3f} V{p.entry_t2[1]:.3f} ; erst heben (Tisch!)")
+        out += [f"G0 X{p.entry_t1[0]:.3f} U{p.entry_t2[0]:.3f} ; vor zur Plattenrueckseite",
+                "G93 ; inverse Zeit: F = 1/min je Segment"]
+        moves, minutes = contour_moves(p, feed)
+        total += minutes
+        out += moves
+        out += ["G94", f"G1 X0 U0 F{feed:g} ; zurueck ueber dem Tisch, Draht noch heiss, Schnittvorschub"]
+        if b.number < len(boards):
+            out.append("M5 ; Draht aus bis zur naechsten Platte")
+    out += ["M5 ; Draht aus, erst bei X0/U0", "G0 Y0 V0 ; dann senken", "M2"]
+    path.notes.append(f"Schnittzeit ca. {total:.1f} min, {len(boards)} Platte(n)")
+    mb = path.min_block
+    out.insert(1, job_line((mb[2], mb[3], mb[5]), path.block[0], path.table_y, path.root_tower, path.s_root,
+                           total, path.extents()))
+    return "\n".join(out) + "\n", path
 
 
 def slice_name(spec: SliceSpec) -> str:
     stem = Path(spec.stl).stem or "koerper"
-    return f"{stem}_scheibe{spec.index}_{spec.thickness:g}mm{'' if spec.loft else '_prisma'}.nc"
+    which = spec.index.strip().replace(" ", "").replace(",", "+")
+    return f"{stem}_scheibe{which}_{spec.thickness:g}mm{'' if spec.loft else '_prisma'}.nc"
 
 
 def slice_to_text(values: dict[str, str]) -> str:
@@ -505,10 +706,14 @@ def preview(spec: SliceSpec):
     """The body, its frame, the slab being cut and all slice planes."""
     tris, zmin, zmax, count = _body(spec)
     k = AXES3.index(spec.axis); j = AXES3.index(spec.up)
-    z0 = zmin + (min(spec.index, count) - 1) * spec.thickness
+    try:
+        chosen = parse_indices(spec.index, count)
+    except WingError:
+        chosen = []
+    slabs = [(zmin + (n - 1) * spec.thickness, min(zmin + n * spec.thickness, zmax)) for n in chosen]
     planes = [zmin + n * spec.thickness for n in range(count + 1)]
     planes[-1] = min(planes[-1], zmax)
-    return tris, k, j, z0, min(z0 + spec.thickness, zmax), planes
+    return tris, k, j, slabs, planes
 
 
 SLICE_MODEL = Model("Scheiben", "slices", FIELDS, SliceSpec.parse, generate, slice_name, slice_to_text,

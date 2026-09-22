@@ -197,7 +197,7 @@ def test_object_tab_shows_the_source_drawing_or_body(win, app):
     sp = win.slice_page
     sp.inputs["stl"].setText("config/beispiel.stl"); sp.inputs["index"].setText("3"); assert sp.rebuild()
     assert isinstance(sp.object_view, MeshView) and len(sp.object_view.tris) == 2952
-    assert (sp.object_view.z0, sp.object_view.z1) == (80.0, 120.0) and len(sp.object_view.planes) == 6
+    assert sp.object_view.slabs == [(80.0, 120.0)] and len(sp.object_view.planes) == 6
     sp.view_tabs.setCurrentIndex(1); app.processEvents()       # paints without error
     sp.object_view.grab()
 
@@ -243,6 +243,22 @@ def test_run_is_drawn_live_on_the_sim_views(win, app):
     assert pp.v1.live is None and len(pp.v1.trail) == 2          # trail stays for inspection
     pp.on_status({"X": 0.0, "Y": 0.0, "U": 0.0, "V": 0.0})
     assert pp.v1.live is None                                     # not running: ignored
+
+
+def test_m0_board_change_shows_the_prompt_and_waits(win, app):
+    pp = win.program_page
+    win.wing_page.rebuild(); win.wing_page.to_program(); app.processEvents()
+    pp.running = True; pp.paused = False; pp._prompt = None
+    pp.on_progress(5, 40, "M0 ; PLATTE 2 EINLEGEN: Scheiben 4, Rueckseite X=20 - dann Weiter")
+    pp.on_status({"X": 0.0, "Y": 12.0, "U": 0.0, "V": 12.0}, "Hold:0"); app.processEvents()
+    assert pp.paused and pp.b_pause.text() == "Weiter" and "PLATTE 2" in pp.line_lbl.text()
+    sent = []
+    pp.pause_requested.connect(sent.append)
+    pp.b_pause.setEnabled(True); pp.b_pause.click()               # "Weiter" -> resume (~), not another hold
+    assert sent == [False] and pp.b_pause.text() == "Pause"
+    pp.on_status({"X": 0.0, "Y": 12.0, "U": 0.0, "V": 12.0}, "Run"); app.processEvents()
+    assert not pp.paused
+    pp.on_finished(True)
 
 
 def test_batch_page_stacks_parts_and_hands_over_one_program(win, app, tmp_path):

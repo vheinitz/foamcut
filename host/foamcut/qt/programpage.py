@@ -92,7 +92,7 @@ class ProgramPage(QWidget):
             return
         if QMessageBox.question(self, "Start", f"{self.name}\n\nDieses Programm abspielen?\nReferenz gesetzt? Drahtleistung eingestellt?") != QMessageBox.StandardButton.Yes:
             return
-        self.running = True; self.paused = False
+        self.running = True; self.paused = False; self._prompt = None
         self.b_start.setEnabled(False); self.b_pause.setEnabled(True); self.b_pause.setText("Pause"); self.b_stop.setEnabled(True)
         self.v1.clear_live(); self.v2.clear_live(); self.v1.set_progress(0); self.v2.set_progress(0)
         self.start_requested.emit(list(self.lines))
@@ -105,16 +105,25 @@ class ProgramPage(QWidget):
     def on_progress(self, i, n, line):
         self.progress.setRange(0, n); self.progress.setValue(i)
         self.line_lbl.setText(f"{i}/{n}  {line}")
+        if line.split(";")[0].strip().upper() in ("M0", "M00"):
+            self._prompt = line.split(";", 1)[1].strip() if ";" in line else "Programm wartet (M0)"
         # segments of the lines grbl has accepted so far: the planned path
         # fills in ahead of the real position (grbl buffers ~16 moves)
         upto = sum(1 for s in self.segs if s.line_no <= i)
         self.v1.set_progress(upto); self.v2.set_progress(upto)
 
-    def on_status(self, wpos: dict):
-        """Live: the real carriage positions on both views while a program runs."""
+    def on_status(self, wpos: dict, state: str = ""):
+        """Live: the real carriage positions on both views while a program runs.
+        An M0 in the program (new foam board) puts grbl into Hold: show what
+        the program asks for and turn the pause button into "Weiter"."""
         if not self.running:
             return
         self.v1.set_live((wpos["X"], wpos["Y"])); self.v2.set_live((wpos["U"], wpos["V"]))
+        if state.startswith("Hold") and not self.paused and getattr(self, "_prompt", None):
+            self.paused = True; self.b_pause.setText("Weiter")
+            self.line_lbl.setText("WARTET: " + self._prompt)
+            self.log("Programm wartet: " + self._prompt + "  -> 'Weiter' druecken")
+            self._prompt = None
 
     def on_finished(self, ok: bool):
         self.running = False; self.paused = False

@@ -308,8 +308,9 @@ class DesignPage(QWidget):
         for e in prog.errors:
             self._message(f"G-Code: {e}", ERR_STYLE)
         ext = path.extents()
-        lines = [n for n in path.notes if n.startswith(("Wurzel an", "Form:", "Kontur:", "Scheibe", "Mindestblock", "Tisch:",
-                                                        "Block bei", "V-Form", "Schnittzeit")) or " Teil(e)" in n]
+        lines = [n for n in path.notes if n.startswith(("Wurzel an", "Form:", "Kontur:", "Scheibe", "Platte", "Holmnut",
+                                                        "Mindestblock", "Tisch:", "Block bei", "V-Form", "Schnittzeit"))
+                 or " Teil(e)" in n]
         t_lo, t_hi = path.table_range
         s_lo, s_hi, x_lo, _ = path.table_max
         self.table_hint.setText(
