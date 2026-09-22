@@ -81,12 +81,14 @@ FIELDS = [
          "wo = oben | unten (Nut von der Haut aus, senkrecht zur Haut an dieser Stelle) oder innen "
          "(geschlossenes Loch, liegend, mittig zwischen Ober- und Unterseite). b x h in mm, das Mass der "
          "Leiste. Beispiel: 30% oben 6x4. Leer = kein Holm. Innenloecher schneidet der Draht nicht mit "
-         "(er muesste den Fluegel aufschlitzen) - sie stehen aber im STL und damit in den Rippen.", "text"),
-        ("holm2", "Holm 2", "", "", "Zweiter Holm, gleiche Schreibweise. Leer = keiner.", "text"),
-        ("holm3", "Holm 3", "", "", "Dritter Holm. Leer = keiner.", "text"),
-        ("holm4", "Holm 4", "", "", "Vierter Holm. Leer = keiner.", "text"),
-        ("holm5", "Holm 5", "", "", "Fuenfter Holm. Leer = keiner.", "text"),
-        ("holm6", "Holm 6", "", "", "Sechster Holm. Leer = keiner.", "text"),
+         "(er muesste den Fluegel aufschlitzen) - sie stehen aber im STL und damit in den Rippen. "
+         "Das Haekchen schaltet den Holm ein und aus; der Wert bleibt stehen (in der Datei steht er dann "
+         "mit 'aus' davor).", "opttext"),
+        ("holm2", "Holm 2", "", "", "Zweiter Holm, gleiche Schreibweise. Leer oder Haekchen weg = keiner.", "opttext"),
+        ("holm3", "Holm 3", "", "", "Dritter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
+        ("holm4", "Holm 4", "", "", "Vierter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
+        ("holm5", "Holm 5", "", "", "Fuenfter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
+        ("holm6", "Holm 6", "", "", "Sechster Holm. Leer oder Haekchen weg = keiner.", "opttext"),
     ]),
     ("lage", "Lage im Schneider", [
         ("root_gap", "Wurzelebene ab Turm", "mm", "150",
@@ -372,8 +374,8 @@ def parse_spars(text: str) -> list[Spar]:
     """'30% oben 6x4; 35% innen 8x8' -> [Spar, ...]"""
     out = []
     for part in (text or "").replace("\n", ";").split(";"):
-        if not part.strip():
-            continue
+        if not part.strip() or part.strip().lower().startswith(("aus", "off", "nein")):
+            continue                      # switched off, the value is kept for later
         m = _SPAR_RE.match(part)
         if not m:
             raise WingError(f"Holm {part.strip()!r}: erwartet '<Lage>[%] oben|unten|innen <b>x<h>'")
