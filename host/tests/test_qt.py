@@ -32,9 +32,9 @@ def win(app, tmp_path, monkeypatch):
     w.close()
 
 
-def test_main_window_has_five_pages(win):
-    assert win.stack.count() == 5
-    assert [win.nav.item(i).text() for i in range(5)] == ["Maschine", "Flügel", "Formen", "Schachteln", "Programm & Sim"]
+def test_main_window_has_all_pages(win):
+    assert win.stack.count() == 6
+    assert [win.nav.item(i).text() for i in range(6)] == ["Maschine", "Flügel", "Formen", "Kontur", "Schachteln", "Programm & Sim"]
 
 
 def test_wing_page_builds_gcode_and_hands_it_to_the_program_page(win, app):
@@ -43,7 +43,7 @@ def test_wing_page_builds_gcode_and_hands_it_to_the_program_page(win, app):
     assert wp.gcode and wp.path is not None
     wp.to_program(); app.processEvents()
     assert win.program_page.lines and win.program_page.name.startswith("clarky_")
-    assert win.nav.currentRow() == 4                     # jumps to Programm & Sim
+    assert win.nav.currentRow() == win.program_row                     # jumps to Programm & Sim
     assert win.program_page.segs and len(win.program_page.segs) > 100
 
 
@@ -158,10 +158,23 @@ def test_shape_page_builds_a_ring_and_hands_it_over(win, app):
     sp.inputs["b_kind"].setCurrentText("ellipse"); sp.rebuild(); app.processEvents()
     assert len(sp.path.root) == 2 * 73 + 1 and sp.values()["b_kind"] == "ellipse"
     sp.to_program(); app.processEvents()
-    assert win.program_page.name.endswith("_ring.nc") and win.nav.currentRow() == 4
+    assert win.program_page.name.endswith("_ring.nc") and win.nav.currentRow() == win.program_row
     sp.inputs["a_hole"].setCurrentText("keine"); assert sp.rebuild() is False      # one-sided hole refused
     texts = [sp.messages.itemAt(i).widget().text() for i in range(sp.messages.count())]
     assert any("Loch" in t for t in texts)
+
+
+def test_contour_page_loads_an_svg_and_hands_over_a_parallel_program(win, app):
+    cp = win.contour_page
+    assert cp.model.key == "contour" and hasattr(cp.inputs["svg"], "browse")
+    cp.inputs["svg"].setText("config/beispiel.svg"); cp.inputs["width"].setText("80")
+    assert cp.rebuild()
+    assert any("3 Teil(e)" in l for l in cp.result.text().splitlines())
+    cp.b_prog.click(); app.processEvents()
+    assert win.program_page.name == "beispiel_b80_30.nc" and win.nav.currentRow() == win.program_row
+    cp.inputs["svg"].setText("config/gibt-es-nicht.svg")
+    assert not cp.rebuild()
+    assert any("nicht gefunden" in cp.messages.itemAt(i).widget().text() for i in range(cp.messages.count()))
 
 
 def test_freischnitt_runs_as_a_relative_program_from_the_current_position(win, app, monkeypatch):
@@ -179,7 +192,7 @@ def test_freischnitt_runs_as_a_relative_program_from_the_current_position(win, a
     mp._cut(0.0); app.processEvents()
     assert started and win.program_page.name.startswith("freischnitt_100mm_0deg")
     assert win.program_page.start_pos["X"] == pytest.approx(30.0)
-    assert not win.program_page.problems and win.nav.currentRow() == 4
+    assert not win.program_page.problems and win.nav.currentRow() == win.program_row
     mp.cut_len.setText("300"); mp._cut(0.0); app.processEvents()     # 30 + 300 > 218 travel
     assert any("Verfahrweg" in p or "faehrt" in p for p in win.program_page.problems)
     # swept face: tower 2 offset forward, cut upward, offset undone at the end
@@ -225,7 +238,7 @@ def test_batch_page_stacks_parts_and_hands_over_one_program(win, app, tmp_path):
     assert parts[-1].bottom == pytest.approx(20.0 + 10.0)      # lowest part: margin above the table
     assert bp.nest.parts[1].name.endswith("(Paar)") and bp.nest.parts[1].path.root == bp.nest.parts[0].path.tip or True
     bp.to_program(); app.processEvents()
-    assert win.program_page.name == "nest_3teile.nc" and win.nav.currentRow() == 4
+    assert win.program_page.name == "nest_3teile.nc" and win.nav.currentRow() == win.program_row
     code = win.program_page.raw
     assert code.count("; --- ") == 3 and code.count("M3 ") == 1
     # the batch survives a text round trip

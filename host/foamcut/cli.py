@@ -433,6 +433,12 @@ def cmd_shape(args) -> int:
     return _cmd_design(args, SHAPE_MODEL, "shape")
 
 
+def cmd_contour(args) -> int:
+    """Generate a prismatic (X=U, Y=V) program for the outlines of an SVG from a .contour spec."""
+    from .contour import CONTOUR_MODEL
+    return _cmd_design(args, CONTOUR_MODEL, "contour")
+
+
 def cmd_nest(args) -> int:
     """Several parts in one block from a .batch list -> one program."""
     from . import nest as ns
@@ -775,6 +781,13 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--airfoils", default="airfoil", help=argparse.SUPPRESS)
     c.add_argument("--template", action="store_true", help="print a spec template")
     c.set_defaults(func=cmd_shape)
+
+    c = sub.add_parser("contour", help="SVG outlines (letters, silhouettes) -> prismatic one-pass G-code")
+    c.add_argument("spec", nargs="?", help=".contour text file (foamcut contour --template)")
+    c.add_argument("-o", "--out")
+    c.add_argument("--airfoils", default="airfoil", help=argparse.SUPPRESS)
+    c.add_argument("--template", action="store_true", help="print a spec template")
+    c.set_defaults(func=cmd_contour)
 
     c = sub.add_parser("nest", help="several saved parts stacked in one block -> one program")
     c.add_argument("batch", nargs="?", help=".batch list (foamcut nest --template)")

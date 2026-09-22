@@ -19,6 +19,7 @@ from .state import UiState
 from .wingpage import DesignPage
 from .batchpage import BatchPage
 from .uiload import load_ui
+from ..contour import CONTOUR_MODEL
 from ..shape import SHAPE_MODEL
 
 
@@ -40,12 +41,16 @@ class MainWindow(QMainWindow):
         self.machine_page.port.setText(port)
         self.wing_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log)
         self.shape_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log, model=SHAPE_MODEL)
+        self.contour_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log, model=CONTOUR_MODEL)
         self.batch_page = BatchPage(self.machine, Path("airfoil"), self.state, self.log)
         self.program_page = ProgramPage(self.machine, self.state, lambda: self.machine_page.power.value(), self.log)
 
+        self.design_pages = [self.wing_page, self.shape_page, self.contour_page, self.batch_page]
         for title, page in (("Maschine", self.machine_page), ("Flügel", self.wing_page), ("Formen", self.shape_page),
-                            ("Schachteln", self.batch_page), ("Programm & Sim", self.program_page)):
+                            ("Kontur", self.contour_page), ("Schachteln", self.batch_page),
+                            ("Programm & Sim", self.program_page)):
             self.nav.addItem(title); self.stack.addWidget(page)
+        self.program_row = self.stack.indexOf(self.program_page)
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav.setCurrentRow(self.state.get("page", 0))
         self.nav.currentRowChanged.connect(lambda i: self.state.set("page", i))
@@ -61,10 +66,10 @@ class MainWindow(QMainWindow):
         self.machine_page.connect_toggle.connect(self.toggle_connection)
         self.machine_page.home_requested.connect(lambda: self.worker and self.worker.submit("home"))
         self.machine_page.homing_dialog.connect(self.open_homing)
-        self.machine_page.machine_changed.connect(lambda: [p.rebuild() for p in (self.wing_page, self.shape_page, self.batch_page)])
-        for page in (self.wing_page, self.shape_page, self.batch_page):
+        self.machine_page.machine_changed.connect(lambda: [p.rebuild() for p in self.design_pages])
+        for page in self.design_pages:
             page.gcode_ready.connect(self.program_page.set_program)
-            page.gcode_ready.connect(lambda *_: self.nav.setCurrentRow(4))
+            page.gcode_ready.connect(lambda *_: self.nav.setCurrentRow(self.program_row))
         self.program_page.start_requested.connect(self.start_program)
         self.program_page.pause_requested.connect(lambda p: self.send_raw(b"!" if p else b"~"))
         self.program_page.stop_requested.connect(self.stop_program)
@@ -92,7 +97,7 @@ class MainWindow(QMainWindow):
         code = straight_cut(length, angle, feed, warmup=self.machine.warmup_s, back=back, skew=(du, dv))
         name = f"freischnitt_{length:g}mm_{angle:g}deg" + (f"_u{du:g}v{dv:g}" if (du or dv) else "") + ".nc"
         self.program_page.set_program(code, name, start_pos=self.wpos())
-        self.nav.setCurrentRow(4)
+        self.nav.setCurrentRow(self.program_row)
         if self.program_page.prepare():
             self.program_page.start()
         else:

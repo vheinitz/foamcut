@@ -21,6 +21,7 @@ from pathlib import Path
 
 from . import AXES
 from .machine import Machine
+from .contour import CONTOUR_MODEL
 from .shape import SHAPE_MODEL
 from .wing import (TABLE_CLEARANCE, TABLE_REST_CLEARANCE, WING_MODEL, Point, WingError, WingPath, _w)
 
@@ -124,7 +125,7 @@ class Nest:
 def _load_spec(file: str, machine: Machine, airfoil_dir: Path):
     p = Path(file)
     text = p.read_text()
-    model = SHAPE_MODEL if p.suffix == ".shape" else WING_MODEL
+    model = {".shape": SHAPE_MODEL, ".contour": CONTOUR_MODEL}.get(p.suffix, WING_MODEL)
     return model, model.parse(text)
 
 
