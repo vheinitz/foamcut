@@ -313,13 +313,34 @@ def surface_at(loop: list[Point], x: float, top: bool) -> tuple[Point, Point, Po
     return (px, py), t, n
 
 
-def notch_normal(loop: list[Point], x: float, w: float, h: float, top: bool) -> tuple[list[Point], list[int]]:
-    """Cut a slot of w x h into the loop at chord position x, square to the
-    skin there (a strip glued on the surface sits flat in it), not upright.
-    Returns the new loop and the indices of its four slot corners."""
+def point_at(loop: list[Point], frac: float) -> tuple[Point, Point, Point]:
+    """Point, unit tangent and inward unit normal at `frac` of the way round a
+    closed loop, measured from loop[0] in the loop's own direction."""
+    n = len(loop)
+    seg = [math.dist(loop[i], loop[(i + 1) % n]) for i in range(n)]
+    total = sum(seg) or 1.0
+    target = (frac % 1.0) * total
+    acc = 0.0
+    for i, d in enumerate(seg):
+        if acc + d >= target or i == n - 1:
+            a, b = loop[i], loop[(i + 1) % n]
+            f = (target - acc) / d if d else 0.0
+            p = (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f)
+            t = ((b[0] - a[0]) / (d or 1.0), (b[1] - a[1]) / (d or 1.0))
+            nrm = (t[1], -t[0])
+            if not inside((p[0] + nrm[0] * 1e-4, p[1] + nrm[1] * 1e-4), loop):
+                nrm = (-nrm[0], -nrm[1])
+            return p, t, nrm
+        acc += d
+    raise ValueError("Kontur ohne Laenge")
+
+
+def slot(loop: list[Point], p: Point, t: Point, n: Point, w: float, h: float) -> tuple[list[Point], list[int]]:
+    """Cut a slot of w x h into the loop at surface point p, square to the
+    surface there (t along it, n into the body). Returns the new loop and the
+    indices of its four corners (mouth, floor, floor, mouth)."""
     if w <= 0 or h <= 0:
         raise ValueError("Nut: Breite und Hoehe muessen > 0 sein")
-    p, t, n = surface_at(loop, x, top)
     m = len(loop)
     walls = []
     for sgn in (1.0, -1.0):
@@ -337,13 +358,12 @@ def notch_normal(loop: list[Point], x: float, w: float, h: float, top: bool) -> 
             if best is None or d < best[0]:
                 best = (d, i, pt)
         if best is None:
-            raise ValueError(f"Nut bei X={x:g} passt nicht auf die Kontur")
+            raise ValueError("Nut passt nicht auf die Kontur")
         walls.append(best)
     (_, e1, m1), (_, e2, m2) = walls
     pts = list(loop)
-    ins = sorted(((e1, m1), (e2, m2)), key=lambda kv: -kv[0])
     idx = {}
-    for e, pt in ins:                     # from the back, so earlier insertions keep their edge
+    for e, pt in sorted(((e1, m1), (e2, m2)), key=lambda kv: -kv[0]):
         at = e + 1
         for q in list(idx):
             if idx[q] >= at:
@@ -368,6 +388,18 @@ def notch_normal(loop: list[Point], x: float, w: float, h: float, top: bool) -> 
     f_from = (pts[keep_from][0] + n[0] * (floor - s2), pts[keep_from][1] + n[1] * (floor - s2))
     kept = [pts[k] for k in arc(keep_from, keep_to)]          # the long way round, outside the slot
     return kept + [f_to, f_from], [len(kept) - 1, len(kept), len(kept) + 1, 0]
+
+
+def notch_normal(loop: list[Point], x: float, w: float, h: float, top: bool) -> tuple[list[Point], list[int]]:
+    """Slot at chord position x, from the upper (top) or lower surface."""
+    p, t, n = surface_at(loop, x, top)
+    return slot(loop, p, t, n, w, h)
+
+
+def notch_at(loop: list[Point], frac: float, w: float, h: float) -> tuple[list[Point], list[int]]:
+    """Slot at `frac` of the way round the outline, measured from its start."""
+    p, t, n = point_at(loop, frac)
+    return slot(loop, p, t, n, w, h)
 
 
 def notch(loop: list[Point], x1: float, x2: float, y_end: float, side: str) -> tuple[list[Point], list[int]]:

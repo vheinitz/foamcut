@@ -1,5 +1,5 @@
 {
-  "cut_feed": 130.0,
+  "cut_feed": 300.0,
   "homing": {
     "auto": true,
     "enabled": true,
@@ -37,16 +37,16 @@
   "kerf_mm": 3.0,
   "max_rate": {
     "U": 375.0,
-    "V": 137.9,
+    "V": 68.9,
     "X": 750.0,
-    "Y": 137.9
+    "Y": 68.9
   },
   "notes": "",
   "steps_per_mm": {
     "U": 3200.0,
-    "V": 8704.0,
+    "V": 17408.0,
     "X": 1600.0,
-    "Y": 8704.0
+    "Y": 17408.0
   },
   "tower_gap_measured": true,
   "tower_gap_mm": 615.0,

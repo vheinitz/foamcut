@@ -24,6 +24,7 @@ from pathlib import Path
 from . import AXES
 from . import airfoil as af
 from . import geom
+from . import mesh
 from .machine import Machine
 
 # (key, label, unit, default, help) - the one place parameters are described.
@@ -388,7 +389,8 @@ def parse_spars(text: str) -> list[Spar]:
 
 
 def apply_spars(loop: list[Point], chord: float, te_x: float, spars: list[Spar],
-                notches: bool = True, holes: bool = True) -> tuple[list[Point], list[list[Point]], list[int]]:
+                notches: bool = True, holes: bool = True,
+                kerf: float = 0.0) -> tuple[list[Point], list[list[Point]], list[int]]:
     """Cut the spar slots into one profile. Returns the outer walk (still
     starting at the trailing edge), the closed hole loops and the walk indices
     of the slot corners - the loft needs them to pair both sides up."""
@@ -409,7 +411,8 @@ def apply_spars(loop: list[Point], chord: float, te_x: float, spars: list[Spar],
                 lo = geom.surface_y(outer, x1, False), geom.surface_y(outer, x2, False)
                 hi = geom.surface_y(outer, x1, True), geom.surface_y(outer, x2, True)
                 yc = (min(lo) + max(hi)) / 2
-                loop_h = geom.rect(x1, yc - spar.h / 2, x2, yc + spar.h / 2)
+                loop_h = geom.rect(x1 + kerf / 2, yc - spar.h / 2 + kerf / 2,
+                                   x2 - kerf / 2, yc + spar.h / 2 - kerf / 2)
                 if any(not geom.inside(q, outer) for q in loop_h):
                     raise ValueError("Loch passt nicht in das Profil")
                 hole_loops.append(loop_h)
@@ -418,7 +421,9 @@ def apply_spars(loop: list[Point], chord: float, te_x: float, spars: list[Spar],
                     continue
                 # square to the skin at that point, not upright: a strip glued
                 # onto the surface sits flat in the slot
-                outer, _ = geom.notch_normal(outer, x, spar.w, spar.h, spar.where == "oben")
+                # the wire melts `kerf` more than it travels: a w wide slot
+                # needs a path that is kerf narrower
+                outer, _ = geom.notch_normal(outer, x, max(spar.w - kerf, 0.2), spar.h, spar.where == "oben")
         except ValueError as e:
             raise WingError(f"Holm bei {spar.dist:g}{'%' if spar.rel else ' mm'} "
                             f"(Profiltiefe {chord:g} mm): {e}") from None
@@ -662,8 +667,8 @@ def build_path(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> WingPath:
     if spars:
         # the wire cuts the slots that open to the skin; a closed hole would
         # mean slitting the wing open, so it only goes into the STL
-        root, _, keys_r = apply_spars(root, spec.root_chord, te_x, spars, holes=False)
-        tip, _, keys_t = apply_spars(tip, spec.tip_chord, tip_te_x, spars, holes=False)
+        root, _, keys_r = apply_spars(root, spec.root_chord, te_x, spars, holes=False, kerf=machine.kerf_mm)
+        tip, _, keys_t = apply_spars(tip, spec.tip_chord, tip_te_x, spars, holes=False, kerf=machine.kerf_mm)
         if keys_r or keys_t:
             n = max(len(root), len(tip)) - 1
             kr = sorted({0} | set(keys_r)); kt = sorted({0} | set(keys_t))
@@ -759,37 +764,10 @@ def to_stl(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> bytes:
     z along the span from the root (0) to the tip (`panel`). Spar slots and
     holes are in it, so slicing the file gives ribs with the slots."""
     root, tip, holes_r, holes_t = _sections(spec, machine, airfoil_dir)
-    span = spec.panel
-    tris: list[tuple] = []
-
-    def wall(a2: list[Point], b2: list[Point], flip: bool):
-        n = len(a2)
-        for i in range(n):
-            j = (i + 1) % n
-            p0 = (a2[i][0], a2[i][1], 0.0); p1 = (a2[j][0], a2[j][1], 0.0)
-            q0 = (b2[i][0], b2[i][1], span); q1 = (b2[j][0], b2[j][1], span)
-            quad = [(p0, p1, q1), (p0, q1, q0)]
-            tris.extend([(c, b, a) for a, b, c in quad] if flip else quad)
-    wall(root[:-1], tip[:-1], False)
-    for hr, ht in zip(holes_r, holes_t):
-        wall(hr, ht, True)                     # a hole faces the other way
-    for pts2, holes, z, flip in ((root[:-1], holes_r, 0.0, True), (tip[:-1], holes_t, span, False)):
-        if holes:
-            walk, exact = geom.bridge_holes(list(pts2), [list(h) for h in holes])
-        else:
-            walk = exact = list(pts2)
-        for a, b, c in geom.triangulate(walk):
-            p0, p1, p2 = exact[a], exact[b], exact[c]
-            if abs((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])) < 1e-9:
-                continue                       # sliver along a slit: zero area once the slit is closed
-            face = ((p0[0], p0[1], z), (p1[0], p1[1], z), (p2[0], p2[1], z))
-            tris.append(tuple(reversed(face)) if flip else face)
-    head = (f"foamcut wing {spec.root_airfoil} {spec.root_chord:g} -> "
-            f"{spec.tip_airfoil or spec.root_airfoil} {spec.tip_chord:g}, Panel {span:g} mm").encode()[:79]
-    out = bytearray(head.ljust(80, b" ")) + struct.pack("<I", len(tris))
-    for a, b, c in tris:
-        out += struct.pack("<3f", 0.0, 0.0, 0.0) + struct.pack("<9f", *a, *b, *c) + b"\0\0"
-    return bytes(out)
+    tris = mesh.loft_body(root[:-1], tip[:-1], spec.panel, holes_r, holes_t)
+    return mesh.to_stl(tris, f"foamcut wing {spec.root_airfoil} {spec.root_chord:g} -> "
+                             f"{spec.tip_airfoil or spec.root_airfoil} {spec.tip_chord:g}, "
+                             f"Panel {spec.panel:g} mm")
 
 
 def stl_name(spec: WingSpec) -> str:
