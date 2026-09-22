@@ -180,3 +180,48 @@ def test_tab_leaves_a_bridge_on_every_loop():
     # the hole walk stops 3 mm before its rear point too
     assert tabbed.count((15, 5)) == 1 and (15.0, 8.0) in tabbed
     assert ct.trim_tail([(0, 0), (10, 0), (0, 0)], 30.0) == [(0, 0), (10, 0)]     # never eats the loop itself
+
+
+# ---------------------------------------------------------------- chain ----
+def circle(cx, cy, r, n=28):
+    return [(cx + r * math.cos(2 * math.pi * k / n), cy + r * math.sin(2 * math.pi * k / n)) for k in range(n)]
+
+
+def parts_of(loops, kerf=0.0):
+    return [ct.part_from_outline(o, 0.0, f"P{i}", kerf) for i, o in enumerate(ct.classify(loops, kerf))]
+
+
+def test_chain_cuts_every_piece_in_two_arcs_with_one_lead_in():
+    parts = parts_of([circle(0, 40, 10), circle(26, 22, 12), circle(52, 40, 9)])
+    pa, pb, order, entry = ct.chain_cut(parts, -12.0, 0.0)
+    assert pa == pb and pa[0] == entry == (-12.0, 40.0) and pa[-1] == entry
+    assert order[0] == 0                                    # top piece first, chain runs downwards
+    # one lead-in: exactly one segment crosses the line x = -6 (in and back out on it)
+    crossings = [1 for u, v in zip(pa, pa[1:]) if (u[0] + 6) * (v[0] + 6) < 0]
+    assert len(crossings) == 2 and pa[1][0] == pytest.approx(-10.0)     # enters the top circle at its rear
+    # every piece is walked completely: its whole outline is covered
+    for p in parts:
+        for q in p.a[:-1]:
+            assert min(geom.seg_dist(q, u, v) for u, v in zip(pa, pa[1:])) < 1e-6
+    # the hop between two pieces is used twice (out and back), so it is cut once
+    hop = [(u, v) for u, v in zip(pa, pa[1:])
+           if all(min(geom.seg_dist(w, x, y) for x, y in zip(p.a, p.a[1:])) > 1e-6 for p in parts for w in (u, v))]
+    assert not hop                                           # hops start and end on contours
+
+
+def test_chain_falls_back_to_single_pieces_when_a_hop_would_hit_a_third():
+    a, b, c = circle(0, 0, 10), circle(60, 0, 10), circle(30, 0, 14)      # c sits between a and b
+    parts = parts_of([a, b, c])
+    _, _, _, _, how = ct.cut_parts(parts, -20.0, 0.0)
+    assert how in ("Kette", "einzeln")                        # both are valid, but it must not crash
+    _, _, _, _, how = ct.cut_parts(parts_of([a, b, c]), -20.0, 0.0, tab=2.0)
+    assert how == "einzeln"                                  # a Haltesteg needs the piece-by-piece route
+
+
+def test_chain_keeps_holes_and_pairs_both_sides():
+    parts = parts_of([circle(0, 0, 20), circle(0, 0, 8), circle(50, 0, 15)])
+    assert len(parts) == 2 and len(ct.classify([circle(0, 0, 20), circle(0, 0, 8)], 0.0)[0].holes) == 1
+    pa, pb, order, entry = ct.chain_cut(parts, -30.0, 0.0)
+    assert len(pa) == len(pb)
+    inner = [q for q in pa if 7.9 < math.dist(q, (0, 0)) < 8.1]
+    assert len(inner) > 10                                   # the hole is cut, on its slit

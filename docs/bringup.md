@@ -73,11 +73,14 @@ nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
 oder „alle“ werden nebeneinander auf einer Schaumplatte der Scheibendicke
 angeordnet (Platte Länge/Höhe, sonst Verfahrweg): Umrisse statt Rechtecke,
 Vierteldrehungen erlaubt, kleinstes umschließendes Rechteck, Scheiben
-2 × Schnittbreite + 0,5 mm auseinander; erst wird angeordnet, dann der
-Fahrweg gesucht (1 × Schnittbreite Abstand zu jedem Teil): die Teile werden in
-einer Kette geschnitten – obere zuerst (ein freies Teil kann fallen), in
-der Reihe hin und in der nächsten zurück, Einstieg an der dem Draht
-nächsten Stelle des Umrisses, kein Rückweg zu einem Einfahrpunkt hinten; Scheibenliste mit Enter bestätigen; der Draht
+2 × Schnittbreite + 0,5 mm auseinander; die Teile werden als **Kette**
+geschnitten: ein Einlauf, dann je Teil ein Bogen, über den Steg zum Nachbarn
+(entlang der Verbindung der Mittelpunkte), am Ende umkehren und auf dem
+Rückweg den jeweils anderen Bogen – die Kanäle dazwischen werden zweimal
+befahren, nicht neu geschnitten. Die Kette läuft von oben nach unten, also
+kommt beim Rückweg das unterste Teil zuerst frei und der Draht fährt von ihm
+weg. Wo ein Steg ein drittes Teil träfe (oder ein Haltesteg gesetzt ist),
+fährt die Software wie bisher Teil für Teil von hinten an; Scheibenliste mit Enter bestätigen; der Draht
 fährt zwischen ihnen um die schon geschnittenen herum; passen nicht alle, gibt es **ein
 Programm je Platte** (`…_platte1.nc`, `_platte2.nc`): die Programmseite zeigt
 nach dem Ende von Platte 1, welche Platte einzulegen ist, und lädt Platte 2

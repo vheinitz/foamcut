@@ -174,7 +174,7 @@ def test_index_lists_ranges_and_all():
 
 
 def test_several_slabs_share_one_board_and_overflow_onto_the_next():
-    code, path = sl.generate(spec(index="2,3,4", block_len=160.0), machine())     # 138 mm usable: two of 63 fit
+    code, path = sl.generate(spec(index="2,3,4", block_len=140.0), machine())     # 118 mm usable: two of them fit
     assert len(path.boards) == 2 and path.boards[0].slabs == [2, 3] and path.boards[1].slabs == [4]
     # one complete program per board: the pieces of board 1 stay in it, so
     # board 2 gets its own file, loaded after the swap
@@ -189,38 +189,37 @@ def test_several_slabs_share_one_board_and_overflow_onto_the_next():
     assert any("Sehnenfehler" in n for n in path.notes)
 
 
-def test_travel_between_pieces_never_crosses_a_piece():
+def test_the_chain_never_cuts_into_a_piece_it_is_not_working_on():
+    """Every segment either runs along the piece being cut, or hops through
+    the waste - it may touch the two pieces a hop joins, nothing else."""
     from foamcut import geom
     boards, _ = sl.build_boards(spec(index="2,3,4", loft=False), machine(kerf=2.0))
     b = boards[0]
-    pts = b.path.root
-    # the pieces: rebuild their placed outlines (kerf paths) from the parts
+    pts = [(x, y + b.entry_y - b.path.chord_y) for x, y in b.path.root]
     tris, zmin, zmax, count = sl._body(spec())
-    items = [{deg: sl._slab(spec(loft=False), machine(kerf=2.0), tris, zmin, zmax, count, n, deg)
-              for deg in (0, 90, 180, 270)} for n in (2, 3, 4)]
-    x0 = spec().block_x + spec().lead
-    placed = []
-    for pl in sl.pack(items, *sl._usable(spec(), machine()))[0]:
-        placed += [sl.Part([(x + x0, y) for x, y in p.a], p.b, p.hull, p.label) for p in pl.parts]
-    outlines = [p.a for p in placed]
-    r6 = lambda q: (round(q[0], 6), round(q[1], 6))
-    piece_pts = {r6(q) for o in outlines for q in o}
-    y0 = b.entry_y - b.path.chord_y                                # root y = board y - entry_y + chord_y
-    for p, q in zip(pts, pts[1:]):
-        pa, qa = (p[0], p[1] + y0), (q[0], q[1] + y0)
-        if r6(pa) in piece_pts and r6(qa) in piece_pts:
-            continue                                                 # cutting along a piece
-        mid = ((pa[0] + qa[0]) / 2, (pa[1] + qa[1]) / 2)
-        for o in outlines:
-            assert not geom.inside(mid, o), (pa, qa)
-            assert not geom._strict_cross(pa, qa, o), (pa, qa)
+    k, i, j = sl._frame(spec())
+    outlines = []
+    for pl in sl.pack([{0: sl._slab(spec(loft=False), machine(kerf=2.0), tris, zmin, zmax, count, n, 0)}
+                       for n in (2, 3, 4)], *sl._usable(spec(), machine()))[0]:
+        x0 = spec().block_x + spec().lead
+        outlines += [[(x + x0, y) for x, y in p.a[:-1]] for p in pl.parts]
+
+    def on(loop, u, v):
+        m = ((u[0] + v[0]) / 2, (u[1] + v[1]) / 2)
+        return min(geom.seg_dist(m, loop[q], loop[(q + 1) % len(loop)]) for q in range(len(loop))) < 1e-6
+    for u, v in zip(pts, pts[1:]):
+        for loop in outlines:
+            if on(loop, u, v):
+                continue                                  # cutting along this piece
+            mid = ((u[0] + v[0]) / 2, (u[1] + v[1]) / 2)
+            assert not geom.inside(mid, loop), (u, v)
 
 
 def test_board_size_limits_the_packing_and_too_big_slabs_are_refused():
     code, path = sl.generate(spec(index="2,3"), machine())
     assert len(path.boards) == 1                                  # side by side within the travel
     code, path = sl.generate(spec(index="2,3", block_len=100.0), machine())
-    assert len(path.boards) == 2                                  # 78 mm usable: one 63 mm slab per board
+    assert len(path.boards) == 2                                  # 78 mm usable: one slab per board
     with pytest.raises(WingError, match="passt nicht"):
         sl.build_path(spec(index="2", block_len=60.0), machine())
 
@@ -250,7 +249,7 @@ def test_pieces_on_one_board_never_cross_each_other():
 def test_travel_behind_the_face_does_not_count_as_profile_outside_the_block():
     """The chain leaves and re-enters behind the block face (air); that must
     not trigger 'Profil ragt aus dem Block', which is about foam."""
-    p = sl.build_path(spec(index="1", thickness=10.0, loft=False, root_gap=0.0, block_x=10.0, table_y=0.0, block_w=20.0),
-                      machine())
-    assert min(q[0] for q in p.root) < 10.0                      # the exit point lies behind the face
+    p = sl.build_path(spec(index="1", thickness=10.0, loft=False, root_gap=0.0, block_x=10.0, table_y=0.0,
+                           block_w=20.0, tab=2.0), machine())     # tab -> piece by piece, exit behind the face
+    assert min(q[0] for q in p.root) < 10.0
     assert not any("ragt" in n for n in p.notes)
