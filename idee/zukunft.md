@@ -95,7 +95,7 @@ Einschätzung (Claude, 2026-09-21):
   Nützlich bei Formen mit Loch (Innenstück fällt beim Schließen der Kontur)
   und bei gestapelten Teilen. Umsetzung billig: Schließsegment um `steg` mm
   verkürzen, Steg per Hand brechen; ein Feld in [schnitt] der Form.
-- Empfehlung: Haltesteg für Formen ja (klein); „langsam für glatt“ als
+- Empfehlung: Haltesteg für Formen ja (klein; umgesetzt 2026-09-22 als `tab` für Kontur/Scheibe prismatisch); „langsam für glatt“ als
   Einstellung nur mit dem kalibrierten Kerf sinnvoll, sonst wird das Teil
   bloß kleiner. Für die Baukastenflügel eher Papier/Folie als Haut
   (distilled.md §5) statt Verglasung.
@@ -145,7 +145,8 @@ Einschätzung (Claude, 2026-09-23):
   STL-Scheiben mit Loft.
 - Umgesetzt am 2026-09-22: Seiten „Kontur“ (`.contour`, SVG) und „Scheiben“
   (`.slices`, STL, verlaufend oder prismatisch), beide auch im Schachteln.
-  Holmnut (oben/unten, Körperkoordinaten) ebenfalls drin. Offen: Haltestege.
+  Holmnut (oben/unten, Körperkoordinaten) und Haltesteg (`tab`, Kontur und
+  prismatische Scheibe) ebenfalls drin.
 
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.

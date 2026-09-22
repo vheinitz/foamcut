@@ -165,3 +165,18 @@ def test_name_and_round_trip():
     assert ct.contour_name(s) == "beispiel_b80_sp_30.nc"
     vals = ct.contour_from_text(ct.TEMPLATE)
     assert ct.ContourSpec.parse(ct.contour_to_text({**vals, "svg": str(EXAMPLE)})).panel == 30.0
+
+
+def test_tab_leaves_a_bridge_on_every_loop():
+    outer = [(0, 0), (40, 0), (40, 20), (0, 20)]
+    hole = [(15, 5), (25, 5), (25, 15), (15, 15)]
+    full, _ = ct.plan([outer, hole], kerf=0.0, entry_x=-10)
+    tabbed, notes = ct.plan([outer, hole], kerf=0.0, entry_x=-10, tab=3.0)
+    assert "Haltesteg 3 mm" in notes[0]
+    # the outer walk no longer returns to its rear point (0, 0): it stops 3 mm short on the last edge
+    assert (0, 0) in full and full.count((0, 0)) >= 2
+    assert tabbed.count((0, 0)) == 1
+    assert (0.0, 3.0) in tabbed                      # stop point on the left edge, 3 mm above the rear corner
+    # the hole walk stops 3 mm before its rear point too
+    assert tabbed.count((15, 5)) == 1 and (15.0, 8.0) in tabbed
+    assert ct.trim_tail([(0, 0), (10, 0), (0, 0)], 30.0) == [(0, 0), (10, 0)]     # never eats the loop itself
