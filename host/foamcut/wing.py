@@ -75,14 +75,18 @@ FIELDS = [
          "0 = gerader Schlitz (nur Schnittbreite).", "num"),
     ]),
     ("holm", "Holme", [
-        ("spars", "Holme", "", "",
-         "Aussparungen fuer Holzleisten, mehrere mit Semikolon getrennt: '<Lage> <wo> <b>x<h>'. "
-         "Lage = Abstand der Nutmitte von der Nasenleiste; mit % bezogen auf die oertliche Tiefe "
-         "(waechst bei Zuspitzung mit), ohne % in mm. wo = oben | unten (Nut von der Haut aus) oder "
-         "innen (geschlossenes Loch, mittig zwischen Ober- und Unterseite). b x h in mm, das Mass der "
-         "Leiste. Beispiel: 30% oben 6x4; 35% innen 8x8. Leer = keine. Innenloecher schneidet der Draht "
-         "nicht mit (er muesste den Fluegel aufschlitzen) - sie stehen aber im STL und damit in den "
-         "Rippen, die man aus Scheiben schneidet.", "text"),
+        ("holm1", "Holm 1", "", "",
+         "Aussparung fuer eine Holzleiste: '<Lage> <wo> <b>x<h>'. Lage = Abstand der Nutmitte von der "
+         "Nasenleiste; mit % bezogen auf die oertliche Tiefe (waechst bei Zuspitzung mit), ohne % in mm. "
+         "wo = oben | unten (Nut von der Haut aus, senkrecht zur Haut an dieser Stelle) oder innen "
+         "(geschlossenes Loch, liegend, mittig zwischen Ober- und Unterseite). b x h in mm, das Mass der "
+         "Leiste. Beispiel: 30% oben 6x4. Leer = kein Holm. Innenloecher schneidet der Draht nicht mit "
+         "(er muesste den Fluegel aufschlitzen) - sie stehen aber im STL und damit in den Rippen.", "text"),
+        ("holm2", "Holm 2", "", "", "Zweiter Holm, gleiche Schreibweise. Leer = keiner.", "text"),
+        ("holm3", "Holm 3", "", "", "Dritter Holm. Leer = keiner.", "text"),
+        ("holm4", "Holm 4", "", "", "Vierter Holm. Leer = keiner.", "text"),
+        ("holm5", "Holm 5", "", "", "Fuenfter Holm. Leer = keiner.", "text"),
+        ("holm6", "Holm 6", "", "", "Sechster Holm. Leer = keiner.", "text"),
     ]),
     ("lage", "Lage im Schneider", [
         ("root_gap", "Wurzelebene ab Turm", "mm", "150",
@@ -249,7 +253,13 @@ class WingSpec:
     block_y: float | None = None        # legacy input: the block bottom used to be free, now it is the table
     block_h: float | None = None
     points: int = 60
-    spars: str = ""
+    holm1: str = ""
+    holm2: str = ""
+    holm3: str = ""
+    holm4: str = ""
+    holm5: str = ""
+    holm6: str = ""
+    spars: str = ""             # older files: all spars in one line, separated by ;
     margin: float = 10.0
     aileron: float = 0.0                # % of chord, 0 = no hinge cut
     hinge_skin: float = 1.5
@@ -352,6 +362,12 @@ class Spar:
 _SPAR_RE = re.compile(r"^\s*([-+]?[\d.,]+)\s*(%?)\s+(oben|unten|innen)\s+([\d.,]+)\s*[xX*]\s*([\d.,]+)\s*$")
 
 
+def spar_list(spec: "WingSpec") -> list[Spar]:
+    """Every filled-in spar line of a spec, empty ones ignored."""
+    return parse_spars("; ".join(t for t in ([getattr(spec, f"holm{k}", "") for k in range(1, 7)]
+                                             + [spec.spars]) if t and t.strip()))
+
+
 def parse_spars(text: str) -> list[Spar]:
     """'30% oben 6x4; 35% innen 8x8' -> [Spar, ...]"""
     out = []
@@ -398,11 +414,9 @@ def apply_spars(loop: list[Point], chord: float, te_x: float, spars: list[Spar],
             else:
                 if not notches:
                     continue
-                top = spar.where == "oben"
-                ys = (geom.surface_y(outer, x1, top), geom.surface_y(outer, x2, top))
-                # measure from the shallower end, so the slot is at least h deep
-                y0 = (min(ys) - spar.h) if top else (max(ys) + spar.h)
-                outer, _ = geom.notch(outer, x1, x2, y0, spar.where)
+                # square to the skin at that point, not upright: a strip glued
+                # onto the surface sits flat in the slot
+                outer, _ = geom.notch_normal(outer, x, spar.w, spar.h, spar.where == "oben")
         except ValueError as e:
             raise WingError(f"Holm bei {spar.dist:g}{'%' if spar.rel else ' mm'} "
                             f"(Profiltiefe {chord:g} mm): {e}") from None
@@ -641,7 +655,7 @@ def build_path(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> WingPath:
     ail = (spec.aileron, spec.hinge_skin, spec.hinge_v) if spec.aileron > 0 else None
     root = _profile_mm(loop_r, spec.root_chord, te_x, 0.0, 0.0, machine.kerf_mm, ail)
     tip = _profile_mm(loop_t, spec.tip_chord, tip_te_x, 0.0, spec.washout, machine.kerf_mm, ail)
-    spars = parse_spars(spec.spars)
+    spars = spar_list(spec)
     spar_notes: list[str] = []
     if spars:
         # the wire cuts the slots that open to the skin; a closed hole would
@@ -724,7 +738,7 @@ def _sections(spec: WingSpec, machine: Machine, airfoil_dir: Path):
     ail = (spec.aileron, spec.hinge_skin, spec.hinge_v) if spec.aileron > 0 else None
     root = _profile_mm(loop_r, spec.root_chord, te_x, 0.0, 0.0, 0.0, ail)
     tip = _profile_mm(loop_t, spec.tip_chord, tip_te_x, 0.0, spec.washout, 0.0, ail)
-    spars = parse_spars(spec.spars)
+    spars = spar_list(spec)
     root, holes_r, keys_r = apply_spars(root, spec.root_chord, te_x, spars)
     tip, holes_t, keys_t = apply_spars(tip, spec.tip_chord, tip_te_x, spars)
     if keys_r or keys_t:
