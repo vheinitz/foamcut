@@ -141,6 +141,7 @@ class DesignPage(QWidget):
         # ---- bottom bar ------------------------------------------------
         self.b_load.clicked.connect(self.load_spec); self.b_save.clicked.connect(self.save_spec)
         self.b_gcode.clicked.connect(self.save_gcode); self.b_prog.clicked.connect(self.to_program)
+        self.b_stl.clicked.connect(self.save_stl); self.b_stl.setVisible(model.stl is not None)
         self.split.setSizes([620, 760])
         QTimer.singleShot(0, self.rebuild)
 
@@ -182,6 +183,22 @@ class DesignPage(QWidget):
         self.log(f"Block gesetzt: {bl:.0f} x {bh:.0f} x {width:.0f} mm, Rueckseite X={bx:g}, Unterkante Y={by:.1f}")
 
     # ---- values ---------------------------------------------------------
+    def save_stl(self):
+        """The finished part as a body - the wing with its spar slots, to be
+        sliced into ribs later (Seite "Scheiben")."""
+        if not self.rebuild() and self.spec is None:
+            return
+        p, _ = QFileDialog.getSaveFileName(self, "STL speichern", self.state.get("last_dir", "gcode"),
+                                           "STL (*.stl)")
+        if not p:
+            return
+        try:
+            Path(p).write_bytes(self.model.stl(self.spec, self.machine, self.airfoil_dir))
+        except (WingError, ValueError, OSError) as e:
+            self.log(f"! STL: {e}"); return
+        self.state.set("last_dir", str(Path(p).parent))
+        self.log(f"STL gespeichert: {p}")
+
     def _pick_file(self, w, ext: str, label: str):
         p, _ = QFileDialog.getOpenFileName(self, label, self.state.get("last_dir", "gcode"),
                                            f"{ext.upper()} (*.{ext});;alle (*)")
@@ -282,7 +299,8 @@ class DesignPage(QWidget):
             self._message(f"G-Code: {e}", ERR_STYLE)
         ext = path.extents()
         lines = [n for n in path.notes if n.startswith(("Wurzel an", "Form:", "Kontur:", "Scheibe", "Platte", "Holmnut",
-                                                        "Mindestblock", "Tisch:", "Block bei", "V-Form", "Schnittzeit"))
+                                                        "Innenloecher", "Mindestblock", "Tisch:", "Block bei",
+                                                        "V-Form", "Schnittzeit"))
                  or " Teil(e)" in n]
         t_lo, t_hi = path.table_range
         s_lo, s_hi, x_lo, _ = path.table_max

@@ -6,6 +6,7 @@ import heapq
 import math
 
 Point = tuple[float, float]
+EPS = 1e-3          # mm, width of the slit that joins a hole to its outline
 
 
 def signed_area(loop: list[Point]) -> float:
@@ -270,3 +271,158 @@ def resample(loop: list[Point], n: int, start: int = 0) -> list[Point]:
         out.append((a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f))
     out.append(pts[0])
     return out
+
+
+# ---------------------------------------------------------------- notches ---
+def surface_y(loop: list[Point], x: float, top: bool) -> float:
+    """Height of the upper (top=True) or lower surface of a closed loop at x."""
+    m = len(loop)
+    best = None
+    for i in range(m):
+        a, b = loop[i], loop[(i + 1) % m]
+        if a[0] == b[0] or (a[0] - x) * (b[0] - x) > 0:
+            continue
+        y = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])
+        if best is None or (y > best if top else y < best):
+            best = y
+    if best is None:
+        raise ValueError(f"X={x:g} liegt ausserhalb der Kontur")
+    return best
+
+
+def notch(loop: list[Point], x1: float, x2: float, y_end: float, side: str) -> tuple[list[Point], list[int]]:
+    """Cut a slot into a CCW loop: from the top (side 'oben') or the bottom
+    edge, between x1 < x2, down/up to y_end. Returns the new loop and the
+    indices of its four slot corners (edge, floor, floor, edge)."""
+    if x1 >= x2:
+        raise ValueError("Nut: Breite muss > 0 sein")
+    top = side == "oben"
+    m = len(loop)
+
+    def crossing(x):
+        best = None
+        for i in range(m):
+            a, b = loop[i], loop[(i + 1) % m]
+            if a[0] == b[0] or (a[0] - x) * (b[0] - x) > 0:
+                continue
+            y = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])
+            if best is None or (y > best[0] if top else y < best[0]):
+                best = (y, i)
+        if best is None:
+            raise ValueError(f"Nut bei X={x:g} liegt ausserhalb der Kontur")
+        return best
+    (ya, ea), (yb, eb) = crossing(x1), crossing(x2)
+    if (y_end >= min(ya, yb)) if top else (y_end <= max(ya, yb)):
+        raise ValueError(f"Nut: Grund Y={y_end:g} liegt nicht innerhalb der Kontur")
+    pts: list[Point] = []
+    idx = {}
+    for i in range(m):
+        pts.append(loop[i])
+        here = [(key, (x, y)) for key, (y, e), x in (("a", (ya, ea), x1), ("b", (yb, eb), x2)) if e == i]
+        here.sort(key=lambda kv: math.dist(loop[i], kv[1]))
+        for key, pt in here:
+            idx[key] = len(pts); pts.append(pt)
+    n = len(pts)
+    ia, ib = idx["a"], idx["b"]
+    # CCW runs right-to-left along the top and left-to-right along the bottom:
+    # the stretch to replace goes from b to a on top, from a to b at the bottom
+    start, end = (ib, ia) if top else (ia, ib)
+    kept = []
+    k = end
+    while k != start:
+        kept.append(pts[k]); k = (k + 1) % n
+    return [pts[start], (pts[start][0], y_end), (pts[end][0], y_end)] + kept, [0, 1, 2, 3]
+
+
+def rect(x0: float, y0: float, x1: float, y1: float) -> list[Point]:
+    """CCW rectangle."""
+    return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+
+
+# ------------------------------------------------------------ triangulate ---
+def bridge_holes(outer: list[Point], holes: list[list[Point]]) -> tuple[list[Point], list[Point]]:
+    """One weakly simple polygon from an outline and its holes: every hole is
+    joined to the outline by a slit between two existing vertices, so no new
+    point lands on the outline (a point in the middle of an edge would leave a
+    T-junction where the cap meets the walls).
+
+    Returns two walks with the same indices: the first has the slit opened by
+    EPS (ear clipping chokes on a zero-width bridge), the second has the exact
+    points. Triangulate the first, build geometry from the second.
+    """
+    walk = list(outer); exact = list(outer)
+    rest = [list(h) for h in holes]
+    for hole in sorted(rest, key=lambda h: min(q[0] for q in h)):
+        others = [h for h in rest if h is not hole]
+        best = None
+        for hi, hp in enumerate(hole):
+            for wi, wp in enumerate(walk):
+                d = math.dist(hp, wp)
+                if best is not None and d >= best[0]:
+                    continue
+                mid = ((hp[0] + wp[0]) / 2, (hp[1] + wp[1]) / 2)
+                if _strict_cross(hp, wp, walk) or any(_strict_cross(hp, wp, h) for h in rest):
+                    continue
+                if not inside(mid, outer) or any(inside(mid, h) for h in rest):
+                    continue
+                best = (d, wi, hi)
+        if best is None:
+            raise ValueError("Loch laesst sich nicht mit der Kontur verbinden")
+        _, wi, hi = best
+        n = len(hole)
+        ring = [hole[(hi - k) % n] for k in range(n)]          # a hole runs the other way round
+        wp, hp = walk[wi], hole[hi]
+        dx, dy = hp[0] - wp[0], hp[1] - wp[1]
+        ln = math.hypot(dx, dy) or 1.0
+        off = (-dy / ln * EPS, dx / ln * EPS)                  # open the slit sideways
+        seam = ([(wp[0] + off[0], wp[1] + off[1])] + [(q[0] + off[0], q[1] + off[1]) for q in ring]
+                + [(q[0] - off[0], q[1] - off[1]) for q in (ring[0], wp)])
+        walk = walk[:wi + 1] + seam + walk[wi + 1:]
+        exact = exact[:wi + 1] + [wp] + ring + [ring[0], wp] + exact[wi + 1:]
+    return walk, exact
+
+
+def triangulate(poly: list[Point]) -> list[tuple[int, int, int]]:
+    """Ear clipping for a simple (or hole-bridged) CCW polygon -> triangles as
+    index triples into `poly`."""
+    n = len(poly)
+    if n < 3:
+        return []
+    idx = list(range(n))
+    if signed_area(poly) < 0:
+        idx.reverse()
+    out: list[tuple[int, int, int]] = []
+    guard = 0
+    while len(idx) > 3 and guard < 4 * n * n:
+        guard += 1
+        best = None
+        for k in range(len(idx)):
+            i0, i1, i2 = idx[k - 1], idx[k], idx[(k + 1) % len(idx)]
+            a, b, c = poly[i0], poly[i1], poly[i2]
+            cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+            if cross <= 1e-12:                           # reflex or degenerate
+                continue
+            if best is None or cross > best[0]:
+                best = (cross, k, (i0, i1, i2))
+            if any(_in_tri(poly[j], a, b, c) for j in idx if j not in (i0, i1, i2)):
+                continue
+            out.append((i0, i1, i2)); idx.pop(k); break
+        else:
+            # No clean ear - happens where the outline is a sliver (a trailing
+            # edge). Clip the most convex corner anyway: a slightly wrong
+            # triangle there beats a hole in the surface.
+            if best is None:
+                break
+            out.append(best[2]); idx.pop(best[1])
+    if len(idx) == 3:
+        out.append((idx[0], idx[1], idx[2]))
+    return out
+
+
+def _in_tri(p: Point, a: Point, b: Point, c: Point) -> bool:
+    d1 = (p[0] - b[0]) * (a[1] - b[1]) - (a[0] - b[0]) * (p[1] - b[1])
+    d2 = (p[0] - c[0]) * (b[1] - c[1]) - (b[0] - c[0]) * (p[1] - c[1])
+    d3 = (p[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (p[1] - a[1])
+    neg = (d1 < -1e-12) or (d2 < -1e-12) or (d3 < -1e-12)
+    pos = (d1 > 1e-12) or (d2 > 1e-12) or (d3 > 1e-12)
+    return not (neg and pos)

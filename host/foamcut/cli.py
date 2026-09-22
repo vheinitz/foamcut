@@ -534,6 +534,11 @@ def _cmd_design(args, model, cmd: str) -> int:
     prog = gc.Program.parse(code)
     for e in prog.errors:
         print(f"  ERROR: {e}")
+    stl = getattr(args, "stl", None)
+    if stl is not None and model.stl:
+        target = Path(stl) if stl else Path(args.spec).with_suffix(".stl")
+        target.write_bytes(model.stl(spec, m, Path(args.airfoils)))
+        print(f"geschrieben: {target}")
     out = Path(args.out) if args.out else Path(args.spec).with_suffix(".nc")
     programs = list(getattr(path, "programs", []) or [])
     if len(programs) > 1:                   # one file per foam board
@@ -815,6 +820,7 @@ def build_parser() -> argparse.ArgumentParser:
     c = sub.add_parser("wing", help="wing panel -> one-pass XYUV G-code")
     c.add_argument("spec", nargs="?", help=".wing text file (foamcut wing --template)")
     c.add_argument("-o", "--out")
+    c.add_argument("--stl", nargs="?", const="", help="also write the panel as a body (STL) for slicing into ribs")
     c.add_argument("--airfoils", default="airfoil", help="directory with .dat files")
     c.add_argument("--template", action="store_true", help="print a spec template")
     c.set_defaults(func=cmd_wing)

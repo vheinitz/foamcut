@@ -600,4 +600,5 @@ def preview(spec: ContourSpec):
 
 
 CONTOUR_MODEL = Model("Kontur", "contour", FIELDS, ContourSpec.parse, generate, contour_name, contour_to_text,
-                      contour_from_text, TEMPLATE, "contour (*.contour);;alle (*)", preview, "loops")
+                      contour_from_text, TEMPLATE, "contour (*.contour);;alle (*)",
+                      preview=preview, preview_kind="loops")

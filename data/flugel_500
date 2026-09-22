@@ -1,0 +1,35 @@
+; foamcut wing
+
+[profil]
+root_airfoil = rg1495.dat
+root_chord = 150
+tip_airfoil = 
+tip_chord = 75
+panel = 500
+area = 
+taper = 0
+sweep = 0
+washout = 0
+dihedral = 0
+mirror = nein
+
+[ruder]
+aileron = 25
+hinge_skin = 1.5
+hinge_v = 5
+
+[lage]
+root_gap = 0
+block_x = 10
+table_y = 0
+lead = 5
+
+[schnitt]
+points = 160
+margin = 3
+
+[block]
+block_s = 10
+block_w = 500
+block_len = 159
+block_h = 22
