@@ -70,6 +70,9 @@ FIELDS = [
     ("schnitt", "Schnitt", [
         ("margin", "Rand", "mm", "10",
          "Mindestabstand des Querschnitts zu Vorderseite, Ober-, Unterseite und Seite B des Blocks.", "num"),
+        ("tab", "Haltesteg", "mm", "0",
+         "Nur prismatisch: so viel jeder Kontur bleibt ungeschnitten, damit Teil und Lochkern nicht auf den "
+         "Draht fallen. 0 = durchschneiden.", "num"),
     ]),
     ("block", "Block", [
         ("block_s", "Block Anfang ab Seite A", "mm", "", "0 oder leer = der Block beginnt an Seite A.", "num"),
@@ -81,7 +84,7 @@ FIELDS = [
 
 TEMPLATE = _template(FIELDS, ("; Scheibe eines 3D-Koerpers (STL) fuer den Schaumschneider.",
                               "; Alle Masse in mm. Zeilen mit ; sind Kommentare."))
-_NUMERIC = {"scale", "thickness", "index", "points", "spar_x", "spar_y", "spar_w", "root_gap", "block_x", "table_y", "lead", "margin",
+_NUMERIC = {"scale", "thickness", "index", "points", "spar_x", "spar_y", "spar_w", "tab", "root_gap", "block_x", "table_y", "lead", "margin",
             "block_s", "block_w", "block_len", "block_h"}
 _MACHINE_KEYS = {"kerf", "feed", "wire", "warmup"}
 _REQUIRED = {"stl", "thickness", "root_gap", "block_x", "table_y"}
@@ -109,6 +112,7 @@ class SliceSpec:
     chord_y: float | None = None
     lead: float = 12.0
     margin: float = 10.0
+    tab: float = 0.0
     block_s: float | None = None
     block_w: float | None = None
     block_len: float | None = None
@@ -445,6 +449,8 @@ def build_path(spec: SliceSpec, machine: Machine) -> WingPath:
         pb = [(x + shift, y - y0) for x, y in pb]
         path = loft(spec, pa, pb, machine)
         kind = "verlaufend"
+        if spec.tab > 0:
+            notes_extra.append("Haltesteg nur beim prismatischen Schnitt - hier ohne")
         # sides of different size: the wire lines converge and cross somewhere
         # beyond the smaller side; at a tower past that point the contour is inverted
         n = spec.points + 1
@@ -459,7 +465,7 @@ def build_path(spec: SliceSpec, machine: Machine) -> WingPath:
         rear = min(q[0] for l in mid for q in l)
         shift = spec.block_x + spec.lead - rear
         mid = [[(x + shift, y) for x, y in l] for l in mid]
-        pts, notes_extra = plan(mid, machine.kerf_mm, spec.block_x)
+        pts, notes_extra = plan(mid, machine.kerf_mm, spec.block_x, spec.tab)
         y0 = pts[0][1]
         rel = [(x, y - y0) for x, y in pts]
         path = loft(spec, rel, list(rel), machine)

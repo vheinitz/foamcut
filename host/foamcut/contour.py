@@ -58,6 +58,9 @@ FIELDS = [
     ("schnitt", "Schnitt", [
         ("margin", "Rand", "mm", "10",
          "Mindestabstand der Zeichnung zu Vorderseite, Ober-, Unterseite und Seite B des Blocks.", "num"),
+        ("tab", "Haltesteg", "mm", "0",
+         "So viel jeder Kontur bleibt ungeschnitten (am hintersten Punkt), damit Teil und Lochkern nicht "
+         "auf den Draht fallen; danach von Hand brechen. 0 = durchschneiden.", "num"),
     ]),
     ("block", "Block", [
         ("block_s", "Block Anfang ab Seite A", "mm", "", "0 oder leer = der Block beginnt an Seite A.", "num"),
@@ -69,7 +72,7 @@ FIELDS = [
 
 TEMPLATE = _template(FIELDS, ("; Freie Kontur aus einer SVG-Zeichnung, beide Seiten gleich (Parallelschnitt).",
                               "; Alle Masse in mm. Zeilen mit ; sind Kommentare."))
-_NUMERIC = {"width", "scale", "panel", "step", "root_gap", "block_x", "table_y", "lead", "margin",
+_NUMERIC = {"width", "scale", "panel", "step", "root_gap", "block_x", "table_y", "lead", "margin", "tab",
             "block_s", "block_w", "block_len", "block_h"}
 _MACHINE_KEYS = {"kerf", "feed", "wire", "warmup"}
 _REQUIRED = {"svg", "panel", "root_gap", "block_x", "table_y"}
@@ -90,6 +93,7 @@ class ContourSpec:
     chord_y: float | None = None
     lead: float = 12.0
     margin: float = 10.0
+    tab: float = 0.0
     block_s: float | None = None
     block_w: float | None = None
     block_len: float | None = None
@@ -133,8 +137,8 @@ class ContourSpec:
             raise WingError("panel, scale und step muessen > 0 sein")
         if spec.width is not None and spec.width <= 0:
             raise WingError("width muss > 0 sein (oder leer)")
-        if spec.lead < 0 or spec.margin < 0:
-            raise WingError("lead und margin duerfen nicht negativ sein")
+        if spec.lead < 0 or spec.margin < 0 or spec.tab < 0:
+            raise WingError("lead, margin und tab duerfen nicht negativ sein")
         return spec
 
 
@@ -181,9 +185,29 @@ def classify(loops: list[list[Point]], kerf: float) -> list[Outline]:
     return sorted(outlines.values(), key=lambda o: o.loop[o.rear][0])
 
 
-def _cut_outline(o: Outline) -> list[Point]:
+def trim_tail(pts: list[Point], tab: float) -> list[Point]:
+    """Drop the last `tab` mm of a closed walk (pts[-1] == pts[0]) so a bridge
+    of foam stays and the piece does not drop onto the wire."""
+    if tab <= 0 or len(pts) < 3:
+        return pts
+    left = tab
+    out = list(pts)
+    while len(out) > 2:
+        d = math.dist(out[-2], out[-1])
+        if d > left:
+            f = (d - left) / d
+            a, b = out[-2], out[-1]
+            out[-1] = (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f)
+            return out
+        left -= d
+        out.pop()
+    return out
+
+
+def _cut_outline(o: Outline, tab: float = 0.0) -> list[Point]:
     """One outline with its holes as a single wire path from its rearmost
-    vertex around and back: holes hang off slits that run straight back."""
+    vertex around and back: holes hang off slits that run straight back.
+    `tab` > 0 leaves that much of every loop uncut (Haltesteg)."""
     # attach every hole to the first loop its backward ray hits (the outline
     # or a hole nearer the back), so slits never cross a hole
     hosts: list[Outline] = [o]
@@ -216,11 +240,11 @@ def _cut_outline(o: Outline) -> list[Point]:
                 out.append(jp)
                 out.extend(walk(hole, hole.rear))
                 out.append(jp)
-        return out
+        return trim_tail(out, tab)
     return walk(o, o.rear)
 
 
-def plan(loops: list[list[Point]], kerf: float, entry_x: float) -> tuple[list[Point], list[str]]:
+def plan(loops: list[list[Point]], kerf: float, entry_x: float, tab: float = 0.0) -> tuple[list[Point], list[str]]:
     """All outlines as one path from the entry point (entry_x, y of the
     rearmost outline) and back to it, in the drawing's coordinates."""
     outlines = classify(loops, kerf)
@@ -242,13 +266,14 @@ def plan(loops: list[list[Point]], kerf: float, entry_x: float) -> tuple[list[Po
         obstacles = [h for j, h in enumerate(hulls) if j != k]
         leg = geom.route(pos, ports[k], obstacles)
         path.extend(leg[1:] if path else leg)
-        path.extend(_cut_outline(outlines[k]))
+        path.extend(_cut_outline(outlines[k], tab))
         path.append(ports[k])
         pos = ports[k]
     leg = geom.route(pos, entry, hulls)
     path.extend(leg[1:])
     notes = [f"{len(outlines)} Teil(e), {sum(len(o.holes) for o in outlines)} Loch/Loecher, "
-             f"Reihenfolge von hinten: " + ", ".join(str(k + 1) for k in order)]
+             f"Reihenfolge von hinten: " + ", ".join(str(k + 1) for k in order)
+             + (f"; Haltesteg {tab:g} mm an jeder Kontur (von Hand brechen)" if tab > 0 else "")]
     return path, notes
 
 
@@ -275,7 +300,7 @@ def build_path(spec: ContourSpec, machine: Machine) -> WingPath:
     rear = min(q[0] for l in loops for q in l)
     shift_x = spec.block_x + spec.lead - rear
     loops = [[(x + shift_x, y) for x, y in l] for l in loops]
-    path, notes = plan(loops, machine.kerf_mm, spec.block_x)
+    path, notes = plan(loops, machine.kerf_mm, spec.block_x, spec.tab)
     y0 = path[0][1]
     rel = [(x, y - y0) for x, y in path]             # entry line = reference line (y = 0)
     wp = loft(spec, rel, list(rel), machine)
