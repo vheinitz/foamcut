@@ -333,5 +333,18 @@ def contour_from_text(text: str) -> dict[str, str]:
     return from_text(text, FIELDS)
 
 
+def preview(spec: ContourSpec):
+    """Outlines of the drawing in mm plus the indices of the holes."""
+    loops, _ = _drawing(spec)
+    # a loop is a hole when it lies inside larger loops an odd number of times
+    holes = set()
+    areas = [abs(geom.signed_area(l)) for l in loops]
+    for i, l in enumerate(loops):
+        depth = sum(1 for j, o in enumerate(loops) if j != i and areas[j] > areas[i] and geom.inside(l[0], o))
+        if depth % 2 == 1:
+            holes.add(i)
+    return loops, holes
+
+
 CONTOUR_MODEL = Model("Kontur", "contour", FIELDS, ContourSpec.parse, generate, contour_name, contour_to_text,
-                      contour_from_text, TEMPLATE, "contour (*.contour);;alle (*)")
+                      contour_from_text, TEMPLATE, "contour (*.contour);;alle (*)", preview, "loops")

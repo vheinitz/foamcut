@@ -187,6 +187,21 @@ def test_slice_page_cuts_one_slab_of_the_example_body(win, app):
     assert win.program_page.name == "beispiel_scheibe3_40mm.nc"
 
 
+def test_object_tab_shows_the_source_drawing_or_body(win, app):
+    from foamcut.qt.canvas import MeshView, ObjectView
+    assert win.wing_page.view_tabs.count() == 1                 # wings have no source object
+    cp = win.contour_page
+    assert [cp.view_tabs.tabText(i) for i in range(2)] == ["Diagramm", "Objekt"]
+    cp.inputs["svg"].setText("config/beispiel.svg"); assert cp.rebuild()
+    assert isinstance(cp.object_view, ObjectView) and len(cp.object_view.loops) == 5 and cp.object_view.holes == {1, 4}
+    sp = win.slice_page
+    sp.inputs["stl"].setText("config/beispiel.stl"); sp.inputs["index"].setText("3"); assert sp.rebuild()
+    assert isinstance(sp.object_view, MeshView) and len(sp.object_view.tris) == 2952
+    assert (sp.object_view.z0, sp.object_view.z1) == (80.0, 120.0) and len(sp.object_view.planes) == 6
+    sp.view_tabs.setCurrentIndex(1); app.processEvents()       # paints without error
+    sp.object_view.grab()
+
+
 def test_freischnitt_runs_as_a_relative_program_from_the_current_position(win, app, monkeypatch):
     from foamcut import gcode as gc
     from foamcut.jog import straight_cut
