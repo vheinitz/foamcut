@@ -180,6 +180,56 @@ def route(start: Point, goal: Point, obstacles: list[list[Point]]) -> list[Point
     return list(reversed(path))
 
 
+def _stretches(keys: list[int], m: int) -> list[tuple[int, int]]:
+    """(a, b) index ranges between consecutive keys, going round the loop
+    from keys[0]; b may exceed m - 1 (use modulo)."""
+    out = []
+    for a, b in zip(keys, keys[1:] + [keys[0]]):
+        while b <= a:
+            b += m
+        out.append((a, b))
+    return out
+
+
+def segment_counts(loop: list[Point], keys: list[int], n: int) -> list[int]:
+    """How many points each stretch between consecutive key vertices gets so
+    that the whole loop has n (proportional to length, at least 1 each)."""
+    m = len(loop)
+    lengths = []
+    for a, b in _stretches(keys, m):
+        lengths.append(sum(math.dist(loop[i % m], loop[(i + 1) % m]) for i in range(a, b)))
+    total = sum(lengths) or 1.0
+    counts = [max(1, int(round(n * l / total))) for l in lengths]
+    while sum(counts) > n and max(counts) > 1:
+        counts[counts.index(max(counts))] -= 1
+    while sum(counts) < n:
+        counts[lengths.index(max(lengths))] += 1
+    return counts
+
+
+def resample_keyed(loop: list[Point], keys: list[int], counts: list[int]) -> list[Point]:
+    """Like resample, but the key vertices (sorted indices, the first is the
+    start) are kept exactly; stretch s gets counts[s] points including its
+    key vertex. Two loops with the same key structure and counts pair up
+    point for point. Last point == first point."""
+    m = len(loop)
+    out: list[Point] = []
+    for (a, b), c in zip(_stretches(keys, m), counts):
+        pts = [loop[i % m] for i in range(a, b + 1)]
+        seg = [math.dist(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
+        total = sum(seg)
+        k = 0; acc = 0.0
+        for q in range(c):
+            target = total * q / c
+            while k < len(seg) - 1 and acc + seg[k] < target:
+                acc += seg[k]; k += 1
+            f = (target - acc) / seg[k] if seg[k] > 0 else 0.0
+            p0, p1 = pts[k], pts[k + 1]
+            out.append((p0[0] + (p1[0] - p0[0]) * f, p0[1] + (p1[1] - p0[1]) * f))
+    out.append(out[0])
+    return out
+
+
 def resample(loop: list[Point], n: int, start: int = 0) -> list[Point]:
     """n + 1 points at equal arc length around the loop, from vertex `start`,
     last point == first point."""

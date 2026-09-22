@@ -122,3 +122,37 @@ def test_parse_rules_and_name():
     assert s.panel == 40.0                                 # nesting reads the thickness as the span
     vals = sl.slice_from_text(sl.TEMPLATE)
     assert sl.SliceSpec.parse(sl.slice_to_text({**vals, "stl": str(EXAMPLE)})).thickness == 40.0
+
+
+# ----------------------------------------------------------------- spar ----
+def test_notch_cuts_a_slot_from_the_chosen_edge():
+    square = [(0, 0), (40, 0), (40, 20), (0, 20)]
+    new, keys = sl.notch(square, 15, 21, 12, "oben")
+    assert [new[k] for k in keys] == [(21, 20.0), (21, 12), (15, 12), (15, 20.0)]
+    assert abs(sl.geom.signed_area(new)) == pytest.approx(40 * 20 - 6 * 8)
+    new, keys = sl.notch(square, 15, 21, 8, "unten")
+    assert [new[k] for k in keys] == [(15, 0.0), (15, 8), (21, 8), (21, 0.0)]
+    with pytest.raises(WingError, match="ausserhalb"):
+        sl.notch(square, 50, 56, 12, "oben")
+    with pytest.raises(WingError, match="Nutgrund"):
+        sl.notch(square, 15, 21, 25, "oben")
+
+
+def test_spar_slot_is_cut_on_both_faces_and_in_prism_mode():
+    from foamcut.contour import classify
+    tris, zmin, zmax, count = sl._body(spec(index=3))
+    k, i, j = sl._frame(spec())
+    for z in (80.0, 120.0):                                   # both faces of slab 3
+        loops, keys = sl._prepare(sl.section(tris, k, z, i, j), (-3.0, 3.0, 5.0, "oben"))
+        corners = [loops[0][q] for q in keys]
+        assert corners[1] == (3.0, 5.0) and corners[2] == (-3.0, 5.0)         # slot floor, body coordinates
+        assert corners[0][0] == 3.0 and corners[3][0] == -3.0 and corners[0][1] > 5.0
+    p = sl.build_path(spec(index=3, spar_side="oben", spar_x=0.0, spar_y=5.0, spar_w=6.0), machine(kerf=0.0))
+    assert len(p.root) == len(p.tip) and any("Holmnut von oben" in n for n in p.notes)
+    pr = sl.build_path(spec(index=3, loft=False, spar_side="oben", spar_x=0.0, spar_y=5.0, spar_w=6.0), machine(kerf=0.0))
+    assert any("Holmnut" in n for n in pr.notes)
+    # kerf: the wire path runs kerf/2 inside the slot walls and above the floor
+    notched, keys = sl.notch([(0, 0), (40, 0), (40, 20), (0, 20)], 15, 21, 12, "oben")
+    o = classify([notched], kerf=2.0)[0]
+    floor = sorted(o.loop[q] for q in keys[1:3])
+    assert floor[0] == pytest.approx((16.0, 13.0)) and floor[1] == pytest.approx((20.0, 13.0))

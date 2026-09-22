@@ -70,8 +70,9 @@ oder Ring – Rumpfsegmente), **Kontur** (SVG-Zeichnung aus Inkscape als
 Parallelschnitt X=U/Y=V: Buchstaben, Silhouetten; Löcher über einen Schlitz
 nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
 **Scheiben** (STL-Körper in Scheiben einer Dicke; Scheibe n verlaufend
-zwischen ihren beiden Schnittflächen oder prismatisch durch die Mitte –
-Rümpfe und große Flügel aus Schaumscheiben auf Holmen),
+zwischen ihren beiden Schnittflächen oder prismatisch durch die Mitte;
+Holmnut von oben/unten in Körperkoordinaten, also in jeder Scheibe an
+derselben Stelle – Rümpfe und große Flügel aus Schaumscheiben auf Holmen),
 **Programm & Sim** (laden/umsetzen,
 Turtle-Simulation beider Schlittenwege, Start/Pause/Stop). Beim Verbinden
 gleicht die GUI alle grbl-Settings mit `config/` ab.
