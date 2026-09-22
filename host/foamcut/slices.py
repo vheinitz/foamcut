@@ -21,9 +21,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import geom
-from .contour import CLEARANCE, Part, classify, part_from_outline, route_parts
+from .contour import Part, classify, clearance, part_from_outline, route_parts
 from .machine import Machine
-from .wing import (Model, WingError, WingPath, _template, contour_moves, from_text, inverted, job_line, loft, to_text)
+from .wing import (Model, WingError, WingPath, _template, contour_moves, emit_gcode, from_text, inverted, loft,
+                   to_text)
 
 Point = tuple[float, float]
 Tri = tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]
@@ -490,7 +491,7 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
         a = _orient(_section_at(tris, k, z0, i, j, zmin, zmax), spec.mirror)
         b = _orient(_section_at(tris, k, z1, i, j, zmin, zmax), spec.mirror)
         pa, pb = _pair_loft(a, b, spec.points, machine.kerf_mm, _spar(spec))
-        hull = geom.grow(geom.convex_hull(pa + pb), CLEARANCE)
+        hull = geom.grow(geom.convex_hull(pa + pb), clearance(machine.kerf_mm))
         parts = [Part(pa, pb, hull, f"Scheibe {index}")]
         kind = "verlaufend"
         # how far the straight wire strays from the true, curved skin between the faces
@@ -502,7 +503,7 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
         mid = _orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror)
         mid, _ = _prepare(mid, _spar(spec))
         outlines = classify(mid, machine.kerf_mm)
-        parts = [part_from_outline(o, spec.tab, f"Scheibe {index}") for o in outlines]
+        parts = [part_from_outline(o, spec.tab, f"Scheibe {index}", machine.kerf_mm) for o in outlines]
         kind = "prismatisch"
     xs = [q[0] for p in parts for q in p.a + p.b]; ys = [q[1] for p in parts for q in p.a + p.b]
     notes.insert(0, f"Scheibe {index} von {count} ({spec.axis} = {z0:.1f}..{z1:.1f}), {kind}, "
@@ -607,7 +608,12 @@ def build_boards(spec: SliceSpec, machine: Machine) -> tuple[list[Board], list[s
     boards: list[Board] = []
     notes: list[str] = []
     x0 = spec.block_x + spec.lead                     # rear edge of the usable area
-    for b, placed in enumerate(pack(slabs, w, h, spec.gap), start=1):
+    # the travel path runs on the pieces' hulls: two hulls must not overlap
+    gap = max(spec.gap, 2 * clearance(machine.kerf_mm) + 1.0)
+    if gap > spec.gap:
+        notes.append(f"Abstand zwischen den Scheiben auf {gap:g} mm erhoeht (Kerf {machine.kerf_mm:g}: "
+                     f"zwei Schmelzkanaele plus Steg)")
+    for b, placed in enumerate(pack(slabs, w, h, gap), start=1):
         parts: list[Part] = []
         for s, dx, dy in placed:
             parts.extend(s.shifted(x0 + dx - s.origin[0], dy - s.origin[1]))
@@ -652,40 +658,34 @@ def build_path(spec: SliceSpec, machine: Machine) -> WingPath:
     return path
 
 
+def board_prompt(b: "Board") -> str:
+    p = b.path
+    return (f"PLATTE {b.number} EINLEGEN: Scheiben {', '.join(map(str, b.slabs))}, Rueckseite X={p.block[0]:g}, "
+            f"unten Y={p.table_y:g}, mind. {p.min_block[2]:.0f} x {p.min_block[3]:.0f} x {p.min_block[5]:.0f} mm "
+            f"(Laenge x Hoehe x Dicke)")
+
+
 def generate(spec: SliceSpec, machine: Machine, airfoil_dir: Path | None = None) -> tuple[str, WingPath]:
+    """One complete program per board (the pieces already cut stay in the
+    old board, so the next board gets its own file, loaded after the user
+    has swapped boards). Returns board 1's program; all of them are in
+    path.programs as (name, code)."""
     path = build_path(spec, machine)
     boards = path.boards
-    feed, wire, warmup = machine.cut_feed, machine.wire_power, machine.warmup_s
-    s_wire = wire if wire > 0 else 1
-    out = ["; foamcut slice: " + path.notes[1],
-           f"; Kerf {machine.kerf_mm:g}, Vorschub {feed:g} mm/min",
-           "; " + path.notes[0], "G21 ; mm", "G90 ; absolut", "G94",
-           f"M3 S{s_wire}" + (" ; Drahtleistung vom GUI-Schieber" if wire <= 0 else ""),
-           f"G4 P{warmup:g} ; aufheizen"]
     total = 0.0
+    stem = slice_name(spec)[:-3]
     for b in boards:
         p = b.path
-        if b.number > 1:
-            out += [f"G0 Y{p.entry_t1[1]:.3f} V{p.entry_t2[1]:.3f} ; Hoehe fuer Platte {b.number}",
-                    f"M0 ; PLATTE {b.number} EINLEGEN: Scheiben {', '.join(map(str, b.slabs))}, Rueckseite X={p.block[0]:g}, "
-                    f"unten Y={p.table_y:g}, mind. {p.min_block[2]:.0f} x {p.min_block[3]:.0f} x {p.min_block[5]:.0f} mm - dann Weiter",
-                    f"M3 S{s_wire}", f"G4 P{warmup:g} ; aufheizen"]
-        else:
-            out.append(f"G0 Y{p.entry_t1[1]:.3f} V{p.entry_t2[1]:.3f} ; erst heben (Tisch!)")
-        out += [f"G0 X{p.entry_t1[0]:.3f} U{p.entry_t2[0]:.3f} ; vor zur Plattenrueckseite",
-                "G93 ; inverse Zeit: F = 1/min je Segment"]
-        moves, minutes = contour_moves(p, feed)
-        total += minutes
-        out += moves
-        out += ["G94", f"G1 X0 U0 F{feed:g} ; zurueck ueber dem Tisch, Draht noch heiss, Schnittvorschub"]
-        if b.number < len(boards):
-            out.append("M5 ; Draht aus bis zur naechsten Platte")
-    out += ["M5 ; Draht aus, erst bei X0/U0", "G0 Y0 V0 ; dann senken", "M2"]
-    path.notes.append(f"Schnittzeit ca. {total:.1f} min, {len(boards)} Platte(n)")
-    mb = path.min_block
-    out.insert(1, job_line((mb[2], mb[3], mb[5]), path.block[0], path.table_y, path.root_tower, path.s_root,
-                           total, path.extents()))
-    return "\n".join(out) + "\n", path
+        header = [f"; foamcut slice: Platte {b.number} von {len(boards)} - " + path.notes[1],
+                  "; " + board_prompt(b),
+                  f"; Kerf {machine.kerf_mm:g}, Vorschub {machine.cut_feed:g} mm/min"]
+        code = emit_gcode(p, machine.cut_feed, machine.wire_power, machine.warmup_s, header)
+        total += contour_moves(p, machine.cut_feed)[1]
+        name = f"{stem}_platte{b.number}.nc" if len(boards) > 1 else f"{stem}.nc"
+        path.programs.append((name, code))
+    path.notes.append(f"Schnittzeit ca. {total:.1f} min, {len(boards)} Platte(n)"
+                      + (" - ein Programm je Platte" if len(boards) > 1 else ""))
+    return path.programs[0][1], path
 
 
 def slice_name(spec: SliceSpec) -> str:

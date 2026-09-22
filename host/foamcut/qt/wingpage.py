@@ -32,6 +32,7 @@ OK_STYLE = "background:#e4f5e4; border:1px solid #8fd19e; padding:4px 8px; borde
 
 class DesignPage(QWidget):
     gcode_ready = pyqtSignal(str, str)          # (gcode text, name)
+    queue_ready = pyqtSignal(list)              # [(name, gcode)] to run one after another (boards)
 
     def __init__(self, machine: Machine, airfoil_dir: Path, state: UiState, log, parent=None,
                  model: Model = WING_MODEL):
@@ -340,7 +341,13 @@ class DesignPage(QWidget):
         if not self.gcode:
             self.stale.setText("NICHT übergeben - Eingabefehler"); return
         self.sent = self.gcode
-        self.gcode_ready.emit(self.gcode, self._name())
+        programs = list(getattr(self.path, "programs", []) or [])
+        if len(programs) > 1:
+            self.gcode_ready.emit(programs[0][1], programs[0][0])
+            self.queue_ready.emit(programs[1:])
+            self.log(f"{len(programs)} Programme (eine Platte je Programm): das naechste nach dem Plattenwechsel laden")
+        else:
+            self.gcode_ready.emit(self.gcode, self._name())
         self.stale.setText(("übergeben: " if ok else "übergeben MIT WARNUNGEN: ") + self._name())
         self.log(f"Flügel-G-Code übernommen: {self._name()}")
 
@@ -350,6 +357,11 @@ class DesignPage(QWidget):
             return
         p, _ = QFileDialog.getSaveFileName(self, "G-Code speichern", self.state.get("last_dir", "gcode"), "G-Code (*.nc)")
         if p:
+            programs = list(getattr(self.path, "programs", []) or [])
+            if len(programs) > 1:                       # one file per board: name_platte1.nc, _platte2.nc, ...
+                for k, (_, code) in enumerate(programs, start=1):
+                    Path(p).with_name(f"{Path(p).stem}_platte{k}.nc").write_text(code)
+                self.log(f"{len(programs)} Dateien gespeichert: {Path(p).stem}_platte1..{len(programs)}.nc")
             Path(p).write_text(self.gcode); self.state.set("last_dir", str(Path(p).parent))
             self.sent = self.gcode
             self.gcode_ready.emit(self.gcode, Path(p).name)

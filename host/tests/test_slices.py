@@ -91,7 +91,7 @@ def test_lofted_program_is_valid_and_the_slab_is_the_block_width():
     assert not prog.errors
     assert path.block[3] > 0 and abs(path.block_s[0] - path.block_s[1]) == pytest.approx(40.0 + 10.0)   # thickness + margin
     assert path.min_block[5] == pytest.approx(50.0)
-    assert code.splitlines()[0].startswith("; foamcut slice: Scheiben aus beispiel.stl: 5 zu 40 mm")
+    assert code.splitlines()[0].startswith("; foamcut slice: Platte 1 von 1 - Scheiben aus beispiel.stl: 5 zu 40 mm")
     assert any("Scheibe 3 von 5" in n for n in path.notes)
 
 
@@ -102,7 +102,8 @@ def test_axes_can_be_chosen_and_mirrored(tmp_path):
     xs = [q[0] for q in p.root]; ys = [q[1] for q in p.root]
     # slicing along x: the section is y (20) forward by z (100) up
     assert max(xs) - (s.block_x + s.lead) == pytest.approx(20.0, abs=1e-6)
-    assert max(ys) - min(ys) == pytest.approx(100.0, abs=1e-6)
+    body = [q for q in p.root if q[0] >= s.block_x + s.lead - 1e-6]      # the piece itself, not the port/travel
+    assert max(q[1] for q in body) - min(q[1] for q in body) == pytest.approx(100.0, abs=1e-6)
     m = sl.build_path(spec(stl=str(tmp_path / "box.stl"), thickness=100.0, index="1", axis="x", up="z", loft=False,
                            mirror=True, block_h=140.0), machine())
     assert max(q[0] for q in m.root) - (s.block_x + s.lead) == pytest.approx(20.0, abs=1e-6)
@@ -174,16 +175,43 @@ def test_index_lists_ranges_and_all():
 def test_several_slabs_share_one_board_and_overflow_onto_the_next():
     code, path = sl.generate(spec(index="2,3,4", block_len=160.0), machine())     # 138 mm usable: two of 63 fit
     assert len(path.boards) == 2 and path.boards[0].slabs == [2, 3] and path.boards[1].slabs == [4]
-    lines = code.splitlines()
-    m0 = [l for l in lines if l.startswith("M0")]
-    assert len(m0) == 1 and "PLATTE 2 EINLEGEN: Scheiben 4" in m0[0]
-    # before the pause: wire off at X0/U0; after it: wire on, warm-up, approach
-    i = lines.index(m0[0])
-    assert lines[i - 3].startswith("G1 X0 U0") and lines[i - 2].startswith("M5") and lines[i - 1].startswith("G0 Y")
-    assert lines[i + 1].startswith("M3 S") and lines[i + 2].startswith("G4 P") and lines[i + 3].startswith("G0 X")
-    assert not gc.Program.parse(code).errors
+    # one complete program per board: the pieces of board 1 stay in it, so
+    # board 2 gets its own file, loaded after the swap
+    assert [n for n, _ in path.programs] == ["beispiel_scheibe2+3+4_40mm_platte1.nc", "beispiel_scheibe2+3+4_40mm_platte2.nc"]
+    assert code == path.programs[0][1] and "M0" not in code
+    for k, (_, prog_code) in enumerate(path.programs, start=1):
+        lines = prog_code.splitlines()
+        assert any(l.startswith(f"; PLATTE {k} EINLEGEN: Scheiben") for l in lines[:6]) and lines[1].startswith("; foamcut-job")
+        assert sum(1 for l in lines if l.startswith("M3")) == 1 and lines[-1] == "M2"
+        assert not gc.Program.parse(prog_code).errors
     assert any(n.startswith("Platte 1: Scheiben 2, 3") for n in path.notes)
     assert any("Sehnenfehler" in n for n in path.notes)
+
+
+def test_travel_between_pieces_never_crosses_a_piece():
+    from foamcut import geom
+    boards, _ = sl.build_boards(spec(index="2,3,4", loft=False), machine(kerf=2.0))
+    b = boards[0]
+    pts = b.path.root
+    # the pieces: rebuild their placed outlines (kerf paths) from the parts
+    tris, zmin, zmax, count = sl._body(spec())
+    slabs = [sl._slab(spec(loft=False), machine(kerf=2.0), tris, zmin, zmax, count, n) for n in (2, 3, 4)]
+    x0 = spec().block_x + spec().lead
+    placed = []
+    for s, dx, dy in sl.pack(slabs, *sl._usable(spec(), machine()), 8.0)[0]:      # 2 * clearance(2) + 1
+        placed += s.shifted(x0 + dx - s.origin[0], dy - s.origin[1])
+    outlines = [p.a for p in placed]
+    r6 = lambda q: (round(q[0], 6), round(q[1], 6))
+    piece_pts = {r6(q) for o in outlines for q in o}
+    y0 = -b.path.chord_y                                           # root is lifted by chord_y; entry line at 0
+    for p, q in zip(pts, pts[1:]):
+        pa, qa = (p[0], p[1] + y0), (q[0], q[1] + y0)
+        if r6(pa) in piece_pts and r6(qa) in piece_pts:
+            continue                                                 # cutting along a piece
+        mid = ((pa[0] + qa[0]) / 2, (pa[1] + qa[1]) / 2)
+        for o in outlines:
+            assert not geom.inside(mid, o), (pa, qa)
+            assert not geom._strict_cross(pa, qa, o), (pa, qa)
 
 
 def test_board_size_limits_the_packing_and_too_big_slabs_are_refused():

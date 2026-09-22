@@ -71,6 +71,7 @@ class MainWindow(QMainWindow):
         self.machine_page.machine_changed.connect(lambda: [p.rebuild() for p in self.design_pages])
         for page in self.design_pages:
             page.gcode_ready.connect(self.program_page.set_program)
+            page.queue_ready.connect(self.program_page.set_queue)
             page.gcode_ready.connect(lambda *_: self.nav.setCurrentRow(self.program_row))
         self.program_page.start_requested.connect(self.start_program)
         self.program_page.pause_requested.connect(lambda p: self.send_raw(b"!" if p else b"~"))

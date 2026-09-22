@@ -30,6 +30,8 @@ class ProgramPage(QWidget):
         self.b_file.clicked.connect(self.load_file)
         self.fmt.addItems(["auto", *gc.AXIS_PRESETS]); self.fmt.currentTextChanged.connect(lambda _: self.prepare())
         self.b_start.clicked.connect(self.start); self.b_pause.clicked.connect(self.pause)
+        self.queue: list[tuple[str, str]] = []          # programs still to run, one per foam board
+        self.b_next.clicked.connect(self.load_next); self.b_next.hide()
         self.b_stop.clicked.connect(self.stop_requested)
         # the two tower views go into the splitter the .ui reserves for them
         self.v1 = SimView("Turm 1   X →   Y ↑", C["root"])
@@ -54,6 +56,9 @@ class ProgramPage(QWidget):
     def set_program(self, raw: str, name: str, path: str | None = None, start_pos: dict | None = None):
         self.raw, self.name = raw, name
         self.start_pos = start_pos          # relative programs: where they begin
+        if not getattr(self, "_from_queue", False):
+            self.queue = []; self.b_next.hide()
+        self._from_queue = False
         if path:
             self.state.set("last_program", path)
         self.log(f"--- Programm: {name}")
@@ -102,6 +107,36 @@ class ProgramPage(QWidget):
         self.b_pause.setText("Weiter" if self.paused else "Pause")
         self.pause_requested.emit(self.paused)
 
+    def set_queue(self, programs: list):
+        """More programs to run after this one, each on a fresh board. The
+        next is loaded only when the user says the board is in."""
+        self.queue = list(programs)
+        self._show_next_hint()
+
+    def _show_next_hint(self):
+        if self.queue:
+            prompt = self._prompt_of(self.queue[0][1])
+            self.b_next.setText(f"Nächste Platte laden… ({len(self.queue)} weitere)"); self.b_next.show()
+            self.b_next.setToolTip(prompt)
+        else:
+            self.b_next.hide()
+
+    @staticmethod
+    def _prompt_of(code: str) -> str:
+        for line in code.splitlines()[:6]:
+            if "EINLEGEN" in line:
+                return line.lstrip("; ").strip()
+        return "naechste Platte einlegen"
+
+    def load_next(self):
+        if not self.queue or self.running:
+            return
+        name, code = self.queue.pop(0)
+        self.log("Plattenwechsel bestaetigt: " + self._prompt_of(code))
+        self._from_queue = True
+        self.set_program(code, name)
+        self._show_next_hint()
+
     def on_progress(self, i, n, line):
         self.progress.setRange(0, n); self.progress.setValue(i)
         self.line_lbl.setText(f"{i}/{n}  {line}")
@@ -130,6 +165,10 @@ class ProgramPage(QWidget):
         self.v1.set_live(None); self.v2.set_live(None)        # the trail stays until the next start
         self.b_start.setEnabled(bool(self.lines)); self.b_pause.setEnabled(False); self.b_pause.setText("Pause"); self.b_stop.setEnabled(False)
         self.log("Programm fertig." if ok else "Programm abgebrochen.")
+        if ok and self.queue:
+            prompt = self._prompt_of(self.queue[0][1])
+            self.line_lbl.setText("FERTIG - " + prompt + "  -> dann 'Nächste Platte laden…'")
+            self.log("Naechste Platte: " + prompt)
 
     # ---- simulation -----------------------------------------------------
     def _info(self):

@@ -202,6 +202,25 @@ def test_object_tab_shows_the_source_drawing_or_body(win, app):
     sp.object_view.grab()
 
 
+def test_board_programs_are_queued_and_loaded_only_on_confirmation(win, app):
+    sp, pp = win.slice_page, win.program_page
+    sp.inputs["stl"].setText("config/beispiel.stl"); sp.inputs["index"].setText("2,3,4"); sp.inputs["block_len"].setText("160")
+    sp.inputs["loft"].nein.setChecked(True)
+    assert sp.rebuild() and len(sp.path.programs) == 2
+    sp.b_prog.click(); app.processEvents()
+    assert pp.name.endswith("_platte1.nc") and len(pp.queue) == 1 and pp.b_next.isVisible()
+    assert "PLATTE 2 EINLEGEN" in pp.b_next.toolTip()
+    pp.running = True; pp.on_finished(True); app.processEvents()
+    assert "PLATTE 2 EINLEGEN" in pp.line_lbl.text()               # asks for the board, loads nothing by itself
+    assert pp.name.endswith("_platte1.nc")
+    pp.b_next.click(); app.processEvents()                        # the user confirms the swap
+    assert pp.name.endswith("_platte2.nc") and not pp.queue and not pp.b_next.isVisible()
+    assert pp.b_start.isEnabled() and not pp.running              # Start is still the user's move
+    # a fresh program from elsewhere clears any queue
+    pp.set_queue([("x.nc", "G21\nM2\n")]); pp.set_program("G21\nM2\n", "anders.nc")
+    assert not pp.queue
+
+
 def test_freischnitt_runs_as_a_relative_program_from_the_current_position(win, app, monkeypatch):
     from foamcut import gcode as gc
     from foamcut.jog import straight_cut
