@@ -18,7 +18,7 @@ from pathlib import Path
 
 from . import airfoil as af
 from .machine import Machine
-from .wing import (Model, WingError, WingPath, _template, emit_gcode, field_catalogue, from_text, loft,
+from .wing import (Model, WingError, WingPath, _template, emit_gcode, field_catalogue, from_text, inverted, loft,
                    to_text)
 
 KINDS = ("rechteck", "dreieck", "kreis", "ellipse")
@@ -293,13 +293,9 @@ def build_path(spec: ShapeSpec, machine: Machine) -> WingPath:
     # beyond the smaller side; at a tower past that point the contour is inverted
     n = spec.points + 1
     for tower, pts in ((1, path.tower1), (2, path.tower2)):
-        if _signed_area(pts[:n]) <= 0:
+        if inverted(path.root[:n], pts[:n]):
             path.notes.append(f"Drahtlinien kreuzen sich vor Turm {tower} - dort darf kein Schaum liegen")
     return path
-
-
-def _signed_area(loop: list[Point]) -> float:
-    return 0.5 * sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(loop, loop[1:]))
 
 
 def generate(spec: ShapeSpec, machine: Machine, airfoil_dir: Path | None = None) -> tuple[str, WingPath]:

@@ -21,6 +21,7 @@ from .batchpage import BatchPage
 from .uiload import load_ui
 from ..contour import CONTOUR_MODEL
 from ..shape import SHAPE_MODEL
+from ..slices import SLICE_MODEL
 
 
 class MainWindow(QMainWindow):
@@ -42,12 +43,13 @@ class MainWindow(QMainWindow):
         self.wing_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log)
         self.shape_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log, model=SHAPE_MODEL)
         self.contour_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log, model=CONTOUR_MODEL)
+        self.slice_page = DesignPage(self.machine, Path("airfoil"), self.state, self.log, model=SLICE_MODEL)
         self.batch_page = BatchPage(self.machine, Path("airfoil"), self.state, self.log)
         self.program_page = ProgramPage(self.machine, self.state, lambda: self.machine_page.power.value(), self.log)
 
-        self.design_pages = [self.wing_page, self.shape_page, self.contour_page, self.batch_page]
+        self.design_pages = [self.wing_page, self.shape_page, self.contour_page, self.slice_page, self.batch_page]
         for title, page in (("Maschine", self.machine_page), ("Flügel", self.wing_page), ("Formen", self.shape_page),
-                            ("Kontur", self.contour_page), ("Schachteln", self.batch_page),
+                            ("Kontur", self.contour_page), ("Scheiben", self.slice_page), ("Schachteln", self.batch_page),
                             ("Programm & Sim", self.program_page)):
             self.nav.addItem(title); self.stack.addWidget(page)
         self.program_row = self.stack.indexOf(self.program_page)

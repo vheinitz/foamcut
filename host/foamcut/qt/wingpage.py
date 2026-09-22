@@ -71,7 +71,8 @@ class DesignPage(QWidget):
                     w.setCurrentText(value)
                     w.currentTextChanged.connect(self.schedule)
                 elif kind.startswith("file:"):
-                    w = QLineEdit(str(value)); w.setMinimumWidth(160)
+                    w = QLineEdit(str(value)); w.setMinimumWidth(100)
+                    w.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                     w.textChanged.connect(self.schedule)
                     w.browse = QPushButton("…"); w.browse.setMaximumWidth(28)
                     w.browse.clicked.connect(lambda _, w=w, ext=kind.split(":", 1)[1], label=label:
@@ -236,7 +237,7 @@ class DesignPage(QWidget):
         while self.messages.count():
             item = self.messages.takeAt(0)
             if item.widget():
-                item.widget().deleteLater()
+                item.widget().hide(); item.widget().deleteLater()
         vals = self.values()
         self.state.set(self.model.key, vals)
         cat = field_catalogue(self.model.fields)

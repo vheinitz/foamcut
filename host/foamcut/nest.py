@@ -23,6 +23,7 @@ from . import AXES
 from .machine import Machine
 from .contour import CONTOUR_MODEL
 from .shape import SHAPE_MODEL
+from .slices import SLICE_MODEL
 from .wing import (TABLE_CLEARANCE, TABLE_REST_CLEARANCE, WING_MODEL, Point, WingError, WingPath, _w)
 
 APPROACH = 5.0          # mm behind the block face where the wire travels between parts
@@ -125,7 +126,7 @@ class Nest:
 def _load_spec(file: str, machine: Machine, airfoil_dir: Path):
     p = Path(file)
     text = p.read_text()
-    model = {".shape": SHAPE_MODEL, ".contour": CONTOUR_MODEL}.get(p.suffix, WING_MODEL)
+    model = {".shape": SHAPE_MODEL, ".contour": CONTOUR_MODEL, ".slices": SLICE_MODEL}.get(p.suffix, WING_MODEL)
     return model, model.parse(text)
 
 

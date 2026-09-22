@@ -33,8 +33,9 @@ def win(app, tmp_path, monkeypatch):
 
 
 def test_main_window_has_all_pages(win):
-    assert win.stack.count() == 6
-    assert [win.nav.item(i).text() for i in range(6)] == ["Maschine", "Flügel", "Formen", "Kontur", "Schachteln", "Programm & Sim"]
+    assert win.stack.count() == 7
+    assert [win.nav.item(i).text() for i in range(7)] == ["Maschine", "Flügel", "Formen", "Kontur", "Scheiben",
+                                                          "Schachteln", "Programm & Sim"]
 
 
 def test_wing_page_builds_gcode_and_hands_it_to_the_program_page(win, app):
@@ -175,6 +176,15 @@ def test_contour_page_loads_an_svg_and_hands_over_a_parallel_program(win, app):
     cp.inputs["svg"].setText("config/gibt-es-nicht.svg")
     assert not cp.rebuild()
     assert any("nicht gefunden" in cp.messages.itemAt(i).widget().text() for i in range(cp.messages.count()))
+
+
+def test_slice_page_cuts_one_slab_of_the_example_body(win, app):
+    sp = win.slice_page
+    sp.inputs["stl"].setText("config/beispiel.stl"); sp.inputs["index"].setText("3")
+    assert sp.rebuild()
+    assert any(l.startswith("Scheibe 3 von 5") for l in sp.result.text().splitlines())
+    sp.b_prog.click(); app.processEvents()
+    assert win.program_page.name == "beispiel_scheibe3_40mm.nc"
 
 
 def test_freischnitt_runs_as_a_relative_program_from_the_current_position(win, app, monkeypatch):
