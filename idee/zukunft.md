@@ -145,7 +145,7 @@ Einschätzung (Claude, 2026-09-23):
   STL-Scheiben mit Loft.
 - Umgesetzt am 2026-09-22: Seiten „Kontur“ (`.contour`, SVG) und „Scheiben“
   (`.slices`, STL, verlaufend oder prismatisch), beide auch im Schachteln.
-  Offen: Holmnuten in allen Scheiben an gleicher Stelle, Haltestege.
+  Holmnut (oben/unten, Körperkoordinaten) ebenfalls drin. Offen: Haltestege.
 
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.

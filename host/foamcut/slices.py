@@ -47,6 +47,16 @@ FIELDS = [
         ("points", "Stuetzpunkte", "", "120",
          "Punkte je Umriss beim verlaufenden Schnitt (beide Seiten gleich viele).", "int"),
     ]),
+    ("holm", "Holmnut", [
+        ("spar_side", "Nut von", "", "keine",
+         "Nut fuer eine Holmleiste, vom Rand des Querschnitts aus: oben oder unten. In Koerperkoordinaten, "
+         "also in jeder Scheibe an derselben Stelle - die Leiste geht gerade durch den Stapel.", "choice:keine|oben|unten"),
+        ("spar_x", "Nut Mitte X", "mm", "0",
+         "Lage der Nutmitte entlang der Vorwaerts-Achse des Koerpers (Koerperkoordinaten mal Faktor).", "num"),
+        ("spar_y", "Nut Grund Y", "mm", "0",
+         "Hoehe des Nutgrunds (Koerperkoordinaten): die Nut reicht vom Rand bis hierher.", "num"),
+        ("spar_w", "Nut Breite", "mm", "6", "Breite der Leiste; die Kerf ist beruecksichtigt.", "num"),
+    ]),
     ("lage", "Lage im Schneider", [
         ("root_gap", "Seite A ab Turm", "mm", "150",
          "Abstand der Seite A des Blocks vom Turm mit dem festen Draht, entlang des Drahts.", "num"),
@@ -71,7 +81,7 @@ FIELDS = [
 
 TEMPLATE = _template(FIELDS, ("; Scheibe eines 3D-Koerpers (STL) fuer den Schaumschneider.",
                               "; Alle Masse in mm. Zeilen mit ; sind Kommentare."))
-_NUMERIC = {"scale", "thickness", "index", "points", "root_gap", "block_x", "table_y", "lead", "margin",
+_NUMERIC = {"scale", "thickness", "index", "points", "spar_x", "spar_y", "spar_w", "root_gap", "block_x", "table_y", "lead", "margin",
             "block_s", "block_w", "block_len", "block_h"}
 _MACHINE_KEYS = {"kerf", "feed", "wire", "warmup"}
 _REQUIRED = {"stl", "thickness", "root_gap", "block_x", "table_y"}
@@ -89,6 +99,10 @@ class SliceSpec:
     index: int = 1
     loft: bool = True
     points: int = 120
+    spar_side: str = "keine"
+    spar_x: float = 0.0
+    spar_y: float = 0.0
+    spar_w: float = 6.0
     root_gap: float = 150.0
     block_x: float = 20.0
     table_y: float = 20.0
@@ -135,6 +149,10 @@ class SliceSpec:
                 if value.lower() not in AXES3:
                     raise WingError(f"Zeile {n}: {key} muss x, y oder z sein")
                 setattr(spec, key, value.lower())
+            elif key == "spar_side":
+                if value.lower() not in ("keine", "oben", "unten"):
+                    raise WingError(f"Zeile {n}: spar_side muss keine, oben oder unten sein")
+                spec.spar_side = value.lower()
             elif key in _NUMERIC:
                 try:
                     num = float(value.replace(",", "."))
@@ -155,6 +173,8 @@ class SliceSpec:
             raise WingError("axis und up muessen verschiedene Achsen sein")
         if spec.points < 12:
             raise WingError("points: mindestens 12")
+        if spec.spar_side != "keine" and spec.spar_w <= 0:
+            raise WingError("spar_w muss > 0 sein")
         if spec.lead < 0 or spec.margin < 0:
             raise WingError("lead und margin duerfen nicht negativ sein")
         return spec
@@ -293,10 +313,76 @@ def _orient(loops: list[list[Point]], mirror: bool) -> list[list[Point]]:
     return loops
 
 
-def _pair_loft(a_loops, b_loops, n: int, kerf: float) -> tuple[list[Point], list[Point]]:
+def notch(loop: list[Point], x1: float, x2: float, y_end: float, side: str) -> tuple[list[Point], list[int]]:
+    """Cut a spar slot into a CCW loop: from the top (side 'oben') or bottom
+    edge between x1 < x2 down/up to y_end. Returns the new loop and the
+    indices of its four slot corners (edge, bottom, bottom, edge)."""
+    if x1 >= x2:
+        raise WingError("Holmnut: Breite muss > 0 sein")
+    top = side == "oben"
+    m = len(loop)
+
+    def crossing(x):
+        best = None
+        for i in range(m):
+            a, b = loop[i], loop[(i + 1) % m]
+            if a[0] == b[0] or (a[0] - x) * (b[0] - x) > 0:
+                continue
+            y = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])
+            if best is None or (y > best[0] if top else y < best[0]):
+                best = (y, i)
+        if best is None:
+            raise WingError(f"Holmnut bei X={x:g} liegt ausserhalb des Querschnitts")
+        return best
+    (ya, ea), (yb, eb) = crossing(x1), crossing(x2)
+    if (y_end >= min(ya, yb)) if top else (y_end <= max(ya, yb)):
+        raise WingError(f"Holmnut: Nutgrund Y={y_end:g} liegt nicht innerhalb des Querschnitts")
+    # rebuild with the two crossings as vertices, in order along their edges
+    pts: list[Point] = []
+    idx = {}
+    for i in range(m):
+        pts.append(loop[i])
+        here = [(key, (x, y)) for key, (y, e), x in (("a", (ya, ea), x1), ("b", (yb, eb), x2)) if e == i]
+        here.sort(key=lambda kv: math.dist(loop[i], kv[1]))
+        for key, pt in here:
+            idx[key] = len(pts); pts.append(pt)
+    n = len(pts)
+    ia, ib = idx["a"], idx["b"]
+    # CCW runs right-to-left along the top and left-to-right along the bottom:
+    # the stretch to replace goes from b to a on top, from a to b at the bottom
+    start, end = (ib, ia) if top else (ia, ib)
+    kept = []
+    k = end
+    while k != start:
+        kept.append(pts[k]); k = (k + 1) % n
+    new = [pts[start], (pts[start][0], y_end), (pts[end][0], y_end)] + kept
+    return new, [0, 1, 2, 3]
+
+
+def _spar(spec: SliceSpec):
+    if spec.spar_side == "keine":
+        return None
+    x = -spec.spar_x if spec.mirror else spec.spar_x
+    return (x - spec.spar_w / 2, x + spec.spar_w / 2, spec.spar_y, spec.spar_side)
+
+
+def _prepare(loops: list[list[Point]], spar) -> tuple[list[list[Point]], list[int] | None]:
+    """CCW, deduped, the outline (largest) notched; keys = its slot corners."""
+    loops = [geom.ccw(geom.dedupe(l)) for l in loops]
+    if spar is None or not loops:
+        return loops, None
+    big = max(range(len(loops)), key=lambda i: abs(geom.signed_area(loops[i])))
+    loops[big], keys = notch(loops[big], *spar)
+    return loops, keys
+
+
+def _pair_loft(a_loops, b_loops, n: int, kerf: float, spar=None) -> tuple[list[Point], list[Point]]:
     """Side paths for a lofted slab: one outline (plus holes) per side,
-    resampled to the same point counts from the rearmost point; holes via
-    a slit from the outline's rearmost point (ring scheme)."""
+    resampled to the same point counts from the rearmost point (and the
+    same slot corners, if a spar slot is cut); holes via a slit from the
+    outline's rearmost point (ring scheme)."""
+    a_loops, keys_a = _prepare(a_loops, spar)
+    b_loops, keys_b = _prepare(b_loops, spar)
     oa = classify(a_loops, kerf); ob = classify(b_loops, kerf)
     if len(oa) != 1 or len(ob) != 1:
         raise WingError(f"verlaufender Schnitt braucht einen Umriss je Seite, hier {len(oa)} / {len(ob)} - "
@@ -304,9 +390,30 @@ def _pair_loft(a_loops, b_loops, n: int, kerf: float) -> tuple[list[Point], list
     A, B = oa[0], ob[0]
     if len(A.holes) != len(B.holes):
         raise WingError(f"Loecher: {len(A.holes)} auf Seite A, {len(B.holes)} auf Seite B - 'loft = nein' waehlen")
+    # classify keeps vertex order (loops are already CCW and deduped), so the
+    # slot corner indices still hold; the rearmost vertex joins them as a key
+    keys = None
+    counts = None
+    if keys_a:
+        keys = sorted(set(keys_a) | {A.rear}) if A.rear not in keys_a else sorted(keys_a)
+        start = keys.index(A.rear)
+        keys = keys[start:] + keys[:start]                 # begin at the rear
+        counts = geom.segment_counts(A.loop, keys, n)
+        # side B: same corner indices, but its own rearmost vertex may differ in
+        # index; the slot corners are the same indices by construction
+        keys_bb = sorted(set(keys_b) | {B.rear}) if B.rear not in keys_b else sorted(keys_b)
+        if len(keys_bb) != len(keys):
+            keys_bb = sorted(set(keys_b) | {A.rear})       # fall back: same index as on side A
+            if len(keys_bb) != len(keys):
+                raise WingError("Holmnut: Schnittflaechen passen nicht zusammen - 'loft = nein' waehlen")
+        start_b = keys_bb.index(B.rear if B.rear in keys_bb else A.rear)
+        keys_b_ordered = keys_bb[start_b:] + keys_bb[:start_b]
 
-    def path_for(o):
-        outer = geom.resample(o.loop, n, o.rear)
+    def path_for(o, key_list):
+        if key_list:
+            outer = geom.resample_keyed(o.loop, key_list, counts)
+        else:
+            outer = geom.resample(o.loop, n, o.rear)
         out = list(outer)
         m = max(24, n // 2)
         for h in sorted(o.holes, key=lambda h: h.loop[h.rear][1]):
@@ -314,7 +421,7 @@ def _pair_loft(a_loops, b_loops, n: int, kerf: float) -> tuple[list[Point], list
             out.append(outer[0])
         return out
     # holes paired by height order on both sides
-    return path_for(A), path_for(B)
+    return path_for(A, keys), path_for(B, keys_b_ordered if keys else None)
 
 
 def build_path(spec: SliceSpec, machine: Machine) -> WingPath:
@@ -329,7 +436,7 @@ def build_path(spec: SliceSpec, machine: Machine) -> WingPath:
     if spec.loft:
         a = _orient(_section_at(tris, k, z0, i, j, zmin, zmax), spec.mirror)
         b = _orient(_section_at(tris, k, z1, i, j, zmin, zmax), spec.mirror)
-        pa, pb = _pair_loft(a, b, spec.points, machine.kerf_mm)
+        pa, pb = _pair_loft(a, b, spec.points, machine.kerf_mm, _spar(spec))
         loops_all = a + b
         rear = min(min(q[0] for q in pa), min(q[0] for q in pb))
         shift = spec.block_x + spec.lead - rear
@@ -347,6 +454,7 @@ def build_path(spec: SliceSpec, machine: Machine) -> WingPath:
                                   "duennere Scheiben oder 'loft = nein' helfen")
     else:
         mid = _orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror)
+        mid, _ = _prepare(mid, _spar(spec))
         loops_all = mid
         rear = min(q[0] for l in mid for q in l)
         shift = spec.block_x + spec.lead - rear
@@ -360,6 +468,9 @@ def build_path(spec: SliceSpec, machine: Machine) -> WingPath:
     path.notes.insert(1, f"Scheibe {spec.index} von {count} ({spec.axis} = {z0:.1f}..{z1:.1f} von {zmin:.1f}..{zmax:.1f}), "
                          f"{kind}, Querschnitt {max(xs) - min(xs):.1f} x {max(ys) - min(ys):.1f} mm, "
                          f"{Path(spec.stl).name}")
+    if spec.spar_side != "keine":
+        path.notes.append(f"Holmnut von {spec.spar_side}: Mitte X={spec.spar_x:g}, Grund Y={spec.spar_y:g}, "
+                          f"Breite {spec.spar_w:g} (Koerperkoordinaten)")
     path.notes.extend(notes_extra)
     return path
 
