@@ -18,13 +18,13 @@ from .grbl import Grbl, GrblAlarm, GrblError
 from . import homing as hm
 from .machine import DEFAULT_PATH as MACHINE_PATH
 from .machine import Machine
-from .link import LinkError, SerialLink, find_port, list_ports
+from .link import LinkError, find_port, list_ports, open_link
 
 DEFAULT_PORT = "auto"
 
 
 def _open(args) -> Grbl:
-    link = SerialLink(args.port, args.baud)
+    link = open_link(args.port, args.baud)
     g = Grbl(link)
     banner = g.connect()
     for line in banner:
@@ -103,7 +103,7 @@ def cmd_probe(args) -> int:
     port = find_port(args.port)
     print(f"pruefe {port} ...")
     try:
-        link = SerialLink(port, args.baud)
+        link = open_link(port, args.baud)
     except LinkError as e:
         print(f"  {e}")
         return 1
@@ -568,7 +568,7 @@ def cmd_console(args) -> int:
 
 def cmd_hwtest(args) -> int:
     """Guided wiring check against the hwtest firmware (not grbl)."""
-    link = SerialLink(args.port, args.baud)
+    link = open_link(args.port, args.baud)
     try:
         return hwt.run(link, auto=args.auto, revs=args.revs, step_us=args.step_us)
     except hwt.HwtestError as e:
@@ -598,7 +598,7 @@ def cmd_bounce(args) -> int:
     if not args.steps:
         print("(--spmm anpassen, wenn deine Spindel anders ist; nachmessen und")
         print(" neu rechnen: spmm_neu = spmm_alt * befohlen / gemessen)")
-    link = SerialLink(args.port, args.baud)
+    link = open_link(args.port, args.baud)
     try:
         return hwt.bounce(link, axes, steps, args.step_us, guard=not args.no_guard)
     except hwt.HwtestError as e:
@@ -652,7 +652,7 @@ def build_parser() -> argparse.ArgumentParser:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", action="version", version=f"foamcut {__version__}")
     p.add_argument("--port", default=DEFAULT_PORT,
-                   help="serial port, or 'auto' for the newest one (default)")
+                   help="serial port, 'auto' for the newest one (default), or tcp://host[:port] for an ESP3D/WiFi bridge")
     p.add_argument("--baud", type=int, default=115200)
     p.add_argument("--machine", default=str(MACHINE_PATH),
                    help=f"machine description (default {MACHINE_PATH})")

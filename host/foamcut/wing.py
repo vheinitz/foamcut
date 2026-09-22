@@ -619,6 +619,15 @@ def inverted(contour: list[Point], tower: list[Point]) -> bool:
     return ax * bx + ay * by < 0
 
 
+def job_line(block: tuple, block_x: float, table_y: float, root_tower: int, s_root: float,
+             minutes: float, extents: dict) -> str:
+    """One machine-readable comment for whoever holds the file without foamcut
+    (the ESP32 program page): what block to cut from and where it goes."""
+    ext = ",".join(f"{a}{lo:.0f}..{hi:.0f}" for a, (lo, hi) in extents.items())
+    return (f"; foamcut-job block={block[0]:.0f}x{block[1]:.0f}x{block[2]:.0f} x={block_x:g} y={table_y:g} "
+            f"root=T{root_tower} s={s_root:g} time={minutes:.1f}min travel={ext}")
+
+
 def _w(p1: Point, p2: Point) -> str:
     return f"X{p1[0]:.3f} Y{p1[1]:.3f} U{p2[0]:.3f} V{p2[1]:.3f}"
 
@@ -664,6 +673,10 @@ def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: li
         "M2",
     ]
     path.notes.append(f"Schnittzeit ca. {total_min:.1f} min, {len(path.root)} Stuetzpunkte")
+    mb = path.min_block
+    out.insert(1, job_line((mb[2], mb[3], mb[5]), path.block[0], path.table_y, path.root_tower, path.s_root,
+                           total_min, path.extents()))
+    out.insert(2, "; " + path.notes[-1])
     return "\n".join(out) + "\n"
 
 

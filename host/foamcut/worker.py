@@ -15,7 +15,7 @@ import time
 from . import AXES
 from . import homing as hm
 from .grbl import Grbl, GrblAlarm, GrblError, parse_status
-from .link import LinkError, SerialLink
+from .link import LinkError, open_link
 from .machine import Homing
 
 try:
@@ -48,7 +48,7 @@ class GrblWorker(threading.Thread):
         self.status_timeout = status_timeout
         self.retry_delay = retry_delay
         self.settings = settings or {}          # pushed to grbl on connect
-        self.link_factory = link_factory or (lambda: SerialLink(port, baud))
+        self.link_factory = link_factory or (lambda: open_link(port, baud))
         self.cmds: queue.Queue = queue.Queue()
         self.events: queue.Queue = queue.Queue()
         self._halt = threading.Event()

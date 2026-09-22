@@ -139,7 +139,7 @@ def test_example_contour_generates_a_valid_prismatic_program():
         assert m.end["X"] == pytest.approx(m.end["U"], abs=1e-6)
         assert m.end["Y"] == pytest.approx(m.end["V"], abs=1e-6)
     assert any("3 Teil(e), 2 Loch" in n for n in path.notes)
-    assert "Parallelschnitt" in code.splitlines()[1]
+    assert "Parallelschnitt" in code.splitlines()[3] and code.splitlines()[1].startswith("; foamcut-job block=")
 
 
 def test_width_scales_and_mirror_flips():

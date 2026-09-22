@@ -101,6 +101,88 @@ class SerialLink:
         self.close()
 
 
+class TcpLink:
+    """The same line protocol over a TCP socket: an ESP32 running ESP3D (or
+    any serial-to-WiFi bridge) in front of the board, `tcp://host[:port]`.
+
+    Unlike opening the USB port this does not reset the board - grbl keeps
+    its position, and connect() asks for the banner with a soft reset.
+    """
+
+    DEFAULT_PORT = 23           # ESP3D's telnet-style raw bridge
+
+    def __init__(self, url: str, connect_timeout: float = 5.0):
+        import socket
+        host, _, port = url.removeprefix("tcp://").partition(":")
+        if not host:
+            raise LinkError(f"tcp://host[:port] erwartet, nicht {url!r}")
+        self.port = url
+        try:
+            self._sock = socket.create_connection((host, int(port or self.DEFAULT_PORT)), timeout=connect_timeout)
+        except (OSError, ValueError) as e:
+            raise LinkError(f"cannot connect {url}: {e}") from e
+        self._sock.settimeout(0.1)
+        self._buf = b""
+        self._startup: list[str] = []
+
+    def drain(self) -> list[str]:
+        out, self._startup = self._startup, []
+        deadline = time.monotonic() + 0.3
+        while time.monotonic() < deadline:
+            line = self.read_line(timeout=0.1)
+            if line is None:
+                break
+            out.append(line)
+        return out
+
+    def write_line(self, text: str) -> None:
+        self.write_raw((text.rstrip("\r\n") + "\n").encode())
+
+    def write_raw(self, data: bytes) -> None:
+        try:
+            self._sock.sendall(data)
+        except OSError as e:
+            raise LinkError(f"Verbindung {self.port}: {e}") from e
+
+    def read_line(self, timeout: float = 2.0) -> str | None:
+        import socket
+        deadline = time.monotonic() + timeout
+        while True:
+            if b"\n" in self._buf:
+                line, self._buf = self._buf.split(b"\n", 1)
+                return line.decode(errors="replace").strip()
+            if time.monotonic() >= deadline:
+                return None
+            try:
+                chunk = self._sock.recv(4096)
+            except socket.timeout:
+                continue
+            except OSError as e:
+                raise LinkError(f"Verbindung {self.port}: {e}") from e
+            if not chunk:
+                raise LinkError(f"Verbindung {self.port} geschlossen")
+            self._buf += chunk
+
+    def close(self) -> None:
+        try:
+            self._sock.close()
+        except OSError:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+def open_link(port: str | None = "auto", baud: int = 115200):
+    """SerialLink for a device name or 'auto', TcpLink for tcp://host[:port]."""
+    if port and port.startswith("tcp://"):
+        return TcpLink(port)
+    return SerialLink(port, baud)
+
+
 class FakeLink:
     """In-memory link for tests and dry runs.
 

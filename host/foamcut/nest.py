@@ -24,7 +24,7 @@ from .machine import Machine
 from .contour import CONTOUR_MODEL
 from .shape import SHAPE_MODEL
 from .slices import SLICE_MODEL
-from .wing import (TABLE_CLEARANCE, TABLE_REST_CLEARANCE, WING_MODEL, Point, WingError, WingPath, _w)
+from .wing import (TABLE_CLEARANCE, TABLE_REST_CLEARANCE, WING_MODEL, Point, WingError, WingPath, _w, job_line)
 
 APPROACH = 5.0          # mm behind the block face where the wire travels between parts
 SPAN_STEP = 5.0         # mm, sampling along the span for the stacking check
@@ -298,7 +298,14 @@ def emit(nest: Nest, feed: float, wire: int, warmup: float) -> str:
     out += [f"G1 X0 U0 F{feed:g} ; zurueck ueber dem Tisch, Draht noch heiss, Schnittvorschub",
            "M5 ; Draht aus, erst bei X0/U0", "G0 Y0 V0 ; dann senken", "M2"]
     nest.notes.append(f"Schnittzeit ca. {total_min:.1f} min")
+    mb = nest.min_block
+    out.insert(1, job_line((mb[2], mb[3], mb[4]), nest.block[0], nest.table_y, machine_root_tower(nest), nest.block_s[0],
+                           total_min, nest.extents()))
     return "\n".join(out) + "\n"
+
+
+def machine_root_tower(nest: Nest) -> int:
+    return nest.parts[0].path.root_tower if nest.parts else 2
 
 
 def generate(batch: Batch, machine: Machine, airfoil_dir: Path) -> tuple[str, Nest]:
