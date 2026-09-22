@@ -244,33 +244,59 @@ def _cut_outline(o: Outline, tab: float = 0.0) -> list[Point]:
     return walk(o, o.rear)
 
 
+@dataclass
+class Part:
+    """One piece to cut: its wire path on side A and B (same length, both
+    starting and ending at the piece's rearmost point), and the convex hull
+    the wire must travel around once the piece is cut."""
+    a: list[Point]
+    b: list[Point]
+    hull: list[Point]
+    label: str = ""
+
+    @property
+    def port(self) -> Point:
+        """Where the wire waits behind the piece before entering / after leaving."""
+        return (min(q[0] for q in self.hull) - CLEARANCE, self.a[0][1])
+
+
+def part_from_outline(o: Outline, tab: float = 0.0, label: str = "") -> Part:
+    path = _cut_outline(o, tab)
+    return Part(path, list(path), geom.grow(geom.convex_hull(o.loop), CLEARANCE), label)
+
+
+def route_parts(parts: list[Part], entry: Point) -> tuple[list[Point], list[Point], list[int]]:
+    """Cut all parts one after another from the entry point and back to it:
+    nearest port first, travelling around every other part's hull. Returns
+    the side A path, the side B path (same length: the travel points are
+    shared, only the pieces differ) and the cut order."""
+    pa: list[Point] = []; pb: list[Point] = []
+    pos = entry
+    todo = list(range(len(parts)))
+    order: list[int] = []
+    while todo:
+        k = min(todo, key=lambda k: math.dist(pos, parts[k].port))
+        todo.remove(k); order.append(k)
+        part = parts[k]
+        obstacles = [q.hull for j, q in enumerate(parts) if j != k]
+        leg = geom.route(pos, part.port, obstacles)
+        leg = leg[1:] if pa else leg
+        pa.extend(leg); pb.extend(leg)
+        pa.extend(part.a); pb.extend(part.b)
+        pa.append(part.port); pb.append(part.port)
+        pos = part.port
+    leg = geom.route(pos, entry, [q.hull for q in parts])
+    pa.extend(leg[1:]); pb.extend(leg[1:])
+    return pa, pb, order
+
+
 def plan(loops: list[list[Point]], kerf: float, entry_x: float, tab: float = 0.0) -> tuple[list[Point], list[str]]:
     """All outlines as one path from the entry point (entry_x, y of the
     rearmost outline) and back to it, in the drawing's coordinates."""
     outlines = classify(loops, kerf)
-    hulls = [geom.grow(geom.convex_hull(o.loop), CLEARANCE) for o in outlines]
-    ports = []
-    for o, hull in zip(outlines, hulls):
-        rx, ry = o.loop[o.rear]
-        px = min(p[0] for p in hull) - CLEARANCE
-        ports.append((px, ry))
-    y0 = outlines[0].loop[outlines[0].rear][1]
-    entry = (entry_x, y0)
-    path: list[Point] = []
-    pos = entry
-    todo = list(range(len(outlines)))
-    order: list[int] = []
-    while todo:
-        k = min(todo, key=lambda k: math.dist(pos, ports[k]))
-        todo.remove(k); order.append(k)
-        obstacles = [h for j, h in enumerate(hulls) if j != k]
-        leg = geom.route(pos, ports[k], obstacles)
-        path.extend(leg[1:] if path else leg)
-        path.extend(_cut_outline(outlines[k], tab))
-        path.append(ports[k])
-        pos = ports[k]
-    leg = geom.route(pos, entry, hulls)
-    path.extend(leg[1:])
+    parts = [part_from_outline(o, tab) for o in outlines]
+    entry = (entry_x, outlines[0].loop[outlines[0].rear][1])
+    path, _, order = route_parts(parts, entry)
     notes = [f"{len(outlines)} Teil(e), {sum(len(o.holes) for o in outlines)} Loch/Loecher, "
              f"Reihenfolge von hinten: " + ", ".join(str(k + 1) for k in order)
              + (f"; Haltesteg {tab:g} mm an jeder Kontur (von Hand brechen)" if tab > 0 else "")]

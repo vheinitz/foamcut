@@ -69,8 +69,12 @@ Tischhöhe/-ausdehnung), **Formen** (freie Querschnitte je Seite, Scheibe
 oder Ring – Rumpfsegmente), **Kontur** (SVG-Zeichnung aus Inkscape als
 Parallelschnitt X=U/Y=V: Buchstaben, Silhouetten; Löcher über einen Schlitz
 nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
-**Scheiben** (STL-Körper in Scheiben einer Dicke; Scheibe n verlaufend
-zwischen ihren beiden Schnittflächen oder prismatisch durch die Mitte;
+**Scheiben** (STL-Körper in Scheiben einer Dicke; Scheiben „2,3,4“, „1-5“
+oder „alle“ werden nebeneinander auf einer Schaumplatte der Scheibendicke
+angeordnet (Platte Länge/Höhe, sonst Verfahrweg); passen nicht alle, hält das
+Programm mit `M0` an und nennt die nächste Platte – Programmseite zeigt die
+Aufforderung, „Weiter“ setzt fort; verlaufend zwischen den beiden
+Schnittflächen (Sehnenfehler je Scheibe im Ergebnis) oder prismatisch;
 Holmnut von oben/unten in Körperkoordinaten, also in jeder Scheibe an
 derselben Stelle – Rümpfe und große Flügel aus Schaumscheiben auf Holmen;
 Reiter „Objekt“ zeigt Zeichnung bzw. drehbaren Körper mit markierter Scheibe),

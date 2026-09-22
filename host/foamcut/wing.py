@@ -384,6 +384,7 @@ class WingPath:
     mirrored: bool = False
     faces: list = field(default_factory=list)       # [(s, profile points)] at both block faces
     notes: list[str] = field(default_factory=list)
+    boards: list = field(default_factory=list)      # slices: one WingPath-bearing Board per foam board
 
     def section(self, s: float) -> list[Point]:
         """The profile the wire cuts in the plane at span position s."""
@@ -634,21 +635,11 @@ def _w(p1: Point, p2: Point) -> str:
     return f"X{p1[0]:.3f} Y{p1[1]:.3f} U{p2[0]:.3f} V{p2[1]:.3f}"
 
 
-def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: list[str]) -> str:
-    """The one-pass program for a lofted path: heat, lift, approach, contour
-    with inverse-time feed, exit, retreat over the table, lower."""
-    s_wire = wire if wire > 0 else 1          # S1 = "use the GUI slider" (translate())
-    out = list(header) + [
-        "; " + path.notes[0],
-        "G21 ; mm",
-        "G90 ; absolut",
-        "G94",
-        f"M3 S{s_wire}" + (" ; Drahtleistung vom GUI-Schieber" if wire <= 0 else ""),
-        f"G4 P{warmup:g} ; aufheizen",
-        f"G0 Y{path.entry_t1[1]:.3f} V{path.entry_t2[1]:.3f} ; erst heben (Tisch!)",
-        f"G0 X{path.entry_t1[0]:.3f} U{path.entry_t2[0]:.3f} ; dann vor zur Blockrueckseite",
-        "G93 ; inverse Zeit: F = 1/min je Segment",
-    ]
+def contour_moves(path: WingPath, feed: float) -> tuple[list[str], float]:
+    """G93 (inverse time) moves from the entry point along the contour and
+    back to the entry point; the feed applies to the faster of the two cut
+    planes. Returns the lines and the minutes they take."""
+    out: list[str] = []
     total_min = 0.0
     prev_r, prev_t = path.entry_root, path.entry_tip
     contact = [(path.root[0], path.tip[0])] + list(zip(path.root, path.tip))[1:] \
@@ -664,6 +655,26 @@ def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: li
         total_min += minutes
         out.append(f"G1 {_w(p1, p2)} F{1.0 / minutes:.4f}")
         prev_r, prev_t = pr, pt
+    return out, total_min
+
+
+def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: list[str]) -> str:
+    """The one-pass program for a lofted path: heat, lift, approach, contour
+    with inverse-time feed, exit, retreat over the table, lower."""
+    s_wire = wire if wire > 0 else 1          # S1 = "use the GUI slider" (translate())
+    out = list(header) + [
+        "; " + path.notes[0],
+        "G21 ; mm",
+        "G90 ; absolut",
+        "G94",
+        f"M3 S{s_wire}" + (" ; Drahtleistung vom GUI-Schieber" if wire <= 0 else ""),
+        f"G4 P{warmup:g} ; aufheizen",
+        f"G0 Y{path.entry_t1[1]:.3f} V{path.entry_t2[1]:.3f} ; erst heben (Tisch!)",
+        f"G0 X{path.entry_t1[0]:.3f} U{path.entry_t2[0]:.3f} ; dann vor zur Blockrueckseite",
+        "G93 ; inverse Zeit: F = 1/min je Segment",
+    ]
+    moves, total_min = contour_moves(path, feed)
+    out += moves
     out += [
         "G94",
         # Retreat at cut feed with the wire hot: if the block sits further back than

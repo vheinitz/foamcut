@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
                 self.mpos.update(payload.get("mpos", {}))
                 self.model.wpos = self.wpos()
                 self.machine_page.show_status(payload, self.model.wpos)
-                self.program_page.on_status(self.model.wpos)
+                self.program_page.on_status(self.model.wpos, payload.get("state", ""))
             elif kind == "offset":
                 self.wco.update(payload)
             elif kind in ("reply", ):
