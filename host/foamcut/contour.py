@@ -283,13 +283,15 @@ def part_from_outline(o: Outline, tab: float = 0.0, label: str = "", kerf: float
 
 
 def _port(own: list[Point], rear: Point, others: list[list[Point]]) -> Point:
-    """A point on the piece's clearance hull, rearmost first, that no other
-    hull covers: where the wire can wait before entering from behind."""
-    for q in sorted(own, key=lambda q: (q[0], abs(q[1] - rear[1]))):
+    """A point on the piece's clearance hull, rearmost first, that lies in no
+    other piece: where the wire can wait before entering from behind. Being
+    inside a neighbour's clearance ring is fine (the wire may pass close),
+    being inside its outline is not."""
+    ranked = sorted(own, key=lambda q: (q[0], abs(q[1] - rear[1])))
+    for q in ranked:
         if not any(geom.inside(q, o) for o in others):
             return q
-    raise WingError("Teil ist von anderen so eng umgeben, dass der Draht es nicht erreicht - "
-                    "Zusatzabstand erhoehen")
+    return ranked[0]
 
 
 def cut_order(parts: list[Part], start: Point) -> list[int]:
@@ -337,15 +339,14 @@ def route_parts(parts: list[Part], entry: Point | float, kerf: float = 0.0,
         part = parts[k]
         others = [h for j, h in enumerate(hulls) if j != k]
         # leaving the previous piece: first step from its outline out to the
-        # nearest vertex of its clearance hull that no other hull covers
+        # nearest vertex of its clearance hull that lies in no other piece
         head: list[Point] = [pos]
         if prev is not None:
-            free = [q for q in hulls[prev] if not any(geom.inside(q, h) for h in others if h is not hulls[prev])]
-            for q in sorted(free, key=lambda q: math.dist(pos, q)):
+            outlines = [p.a[:-1] for j, p in enumerate(parts) if j != prev]
+            free = [q for q in hulls[prev] if not any(geom.inside(q, o) for o in outlines)]
+            for q in sorted(free or hulls[prev], key=lambda q: math.dist(pos, q)):
                 if not geom._strict_cross(pos, q, parts[prev].a[:-1]):
                     head.append(q); break
-            else:
-                raise WingError(f"{parts[prev].label or 'Teil'}: kein freier Weg vom Teil weg - Zusatzabstand erhoehen")
         cands = sorted(part.outer or [0], key=lambda i: math.dist(head[-1], part.a[i])) if part.closed else [0]
         leg = None
         for idx in cands[:12]:
@@ -369,13 +370,12 @@ def route_parts(parts: list[Part], entry: Point | float, kerf: float = 0.0,
         pos = pa[-1]
         prev = k
     # out: off the last piece, then back behind the block face at that height
-    exit_pt = (entry[0] - 2.0, pos[1])
-    free = [q for q in hulls[prev] if not any(geom.inside(q, h) for j, h in enumerate(hulls) if j != prev)]
-    for q in sorted(free, key=lambda q: math.dist(pos, q) + abs(q[1] - pos[1])):
+    outlines = [p.a[:-1] for j, p in enumerate(parts) if j != prev]
+    free = [q for q in hulls[prev] if not any(geom.inside(q, o) for o in outlines)]
+    q = pos
+    for q in sorted(free or hulls[prev], key=lambda q: math.dist(pos, q) + abs(q[1] - pos[1])):
         if not geom._strict_cross(pos, q, parts[prev].a[:-1]):
             break
-    else:
-        raise WingError("kein freier Weg vom letzten Teil weg - Zusatzabstand erhoehen")
     exit_pt = (entry[0] - 2.0, q[1])
     leg = [pos] + geom.route(q, exit_pt, hulls)
     pa.extend(leg[1:]); pb.extend(leg[1:])

@@ -225,3 +225,19 @@ def test_chain_keeps_holes_and_pairs_both_sides():
     assert len(pa) == len(pb)
     inner = [q for q in pa if 7.9 < math.dist(q, (0, 0)) < 8.1]
     assert len(inner) > 10                                   # the hole is cut, on its slit
+
+
+def test_pieces_packed_tighter_than_the_clearance_still_get_a_route():
+    """Neighbours can sit closer than the travel clearance (their rings
+    overlap). The wire may then graze a neighbour's ring - it must not give
+    up, as long as it does not cut into the piece itself."""
+    parts = parts_of([circle(0, 0, 10), circle(23, 0, 10), circle(46, 0, 10)], kerf=0.0)
+    pa, pb, order, entry, how = ct.cut_parts(parts, -20.0, 6.0)      # clearance 6 > the 3 mm gaps
+    assert how in ("Kette", "einzeln") and len(pa) > 30
+    for u, v in zip(pa, pa[1:]):
+        for p in parts:
+            loop = p.a[:-1]
+            mid = ((u[0] + v[0]) / 2, (u[1] + v[1]) / 2)
+            if min(geom.seg_dist(mid, loop[i], loop[(i + 1) % len(loop)]) for i in range(len(loop))) < 1e-6:
+                continue                                             # cutting along this piece
+            assert not geom.inside(mid, loop)                        # never through one

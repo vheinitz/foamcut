@@ -510,7 +510,10 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
         mid = turn(_orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror))
         mid, _ = _prepare(mid, _spar(spec))
         outlines = classify(mid, machine.kerf_mm)
-        parts = [part_from_outline(o, spec.tab, f"Scheibe {index}", machine.kerf_mm) for o in outlines]
+        # a section can fall into several outlines (a car body and its wheels):
+        # number them, the cut order note names them
+        parts = [part_from_outline(o, spec.tab, f"Scheibe {index}" + (f".{i + 1}" if len(outlines) > 1 else ""),
+                                   machine.kerf_mm) for i, o in enumerate(outlines)]
         kind = "prismatisch"
     # pieces are packed with half the gap around each: two pieces end up
     # `gap` apart (cut path to cut path), which the wire can still pass
@@ -720,7 +723,8 @@ def build_boards(spec: SliceSpec, machine: Machine) -> tuple[list[Board], list[s
         boards.append(Board(b, path, nums, (used_w, used_h), entry[1]))
         turned = [f"{pl.slab.index} um {pl.deg}°" for pl in placed if pl.deg]
         notes.append(f"Platte {b}: Scheiben {', '.join(map(str, nums))}, Schnittreihenfolge ({how}) "
-                     f"{', '.join(parts[k].label.split()[-1] for k in order)}; belegt {used_w:.0f} x {used_h:.0f} mm "
+                     f"{', '.join(parts[k].label.split()[-1] for k in order)}; {len(parts)} Teil(e), "
+                     f"belegt {used_w:.0f} x {used_h:.0f} mm "
                      f"von {w:.0f} x {h:.0f} nutzbar" + (f"; gedreht: {', '.join(turned)}" if turned else ""))
     for s in slabs:
         notes.extend(s.notes)

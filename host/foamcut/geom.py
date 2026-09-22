@@ -142,15 +142,19 @@ def route(start: Point, goal: Point, obstacles: list[list[Point]]) -> list[Point
     """Shortest polyline from start to goal that crosses none of the convex
     obstacle loops (visibility graph over their vertices + Dijkstra).
     start and goal must lie outside the obstacles. Returns [start, ..., goal]."""
+    # An endpoint inside an obstacle means the wire already stands in that
+    # piece's clearance ring (neighbours packed tight). Such an obstacle
+    # cannot be routed around, so it is dropped for this query - grazing a
+    # neighbour's clearance is allowed, cutting into it is prevented by the
+    # caller, which keeps the piece outlines out of the way.
+    obstacles = [ob for ob in obstacles if not (inside(start, ob) or inside(goal, ob))]
+
     def tag(p: Point, default: int) -> tuple[Point, int, int]:
         # a start/goal that is a hull vertex belongs to that hull (edge moves allowed)
         for k, ob in enumerate(obstacles):
             for i, q in enumerate(ob):
                 if math.dist(p, q) < 1e-9:
                     return (p, k, i)
-        for k, ob in enumerate(obstacles):
-            if inside(p, ob):
-                raise ValueError("Start- oder Zielpunkt liegt in einem Teil - Abstand zwischen den Teilen zu klein")
         return (p, default, 0)
     nodes: list[tuple[Point, int, int]] = [tag(start, -1), tag(goal, -2)]
     for k, ob in enumerate(obstacles):
