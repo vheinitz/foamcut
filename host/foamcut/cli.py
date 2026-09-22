@@ -535,8 +535,15 @@ def _cmd_design(args, model, cmd: str) -> int:
     for e in prog.errors:
         print(f"  ERROR: {e}")
     out = Path(args.out) if args.out else Path(args.spec).with_suffix(".nc")
-    out.write_text(code)
-    print(f"geschrieben: {out}")
+    programs = list(getattr(path, "programs", []) or [])
+    if len(programs) > 1:                   # one file per foam board
+        for k, (_, board_code) in enumerate(programs, start=1):
+            target = out.with_name(f"{out.stem}_platte{k}.nc")
+            target.write_text(board_code)
+            print(f"geschrieben: {target}")
+    else:
+        out.write_text(code)
+        print(f"geschrieben: {out}")
     return 1 if (problems or prog.errors) else 0
 
 

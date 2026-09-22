@@ -16,6 +16,7 @@
        <property name="styleSheet"><string>font-size:13pt; font-weight:bold;</string></property>
       </widget>
      </item>
+     <item><widget class="QPushButton" name="b_next"><property name="visible"><bool>false</bool></property><property name="text"><string>Nächste Platte laden…</string></property><property name="styleSheet"><string>font-weight:bold; color:#1f5fbf;</string></property></widget></item>
      <item><widget class="QPushButton" name="b_start"><property name="enabled"><bool>false</bool></property><property name="text"><string>Start</string></property></widget></item>
      <item><widget class="QPushButton" name="b_pause"><property name="enabled"><bool>false</bool></property><property name="text"><string>Pause</string></property></widget></item>
      <item><widget class="QPushButton" name="b_stop"><property name="enabled"><bool>false</bool></property><property name="text"><string>STOP</string></property><property name="styleSheet"><string>font-weight:bold; color:#b00;</string></property></widget></item>

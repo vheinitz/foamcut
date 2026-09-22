@@ -71,9 +71,11 @@ Parallelschnitt X=U/Y=V: Buchstaben, Silhouetten; Löcher über einen Schlitz
 nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
 **Scheiben** (STL-Körper in Scheiben einer Dicke; Scheiben „2,3,4“, „1-5“
 oder „alle“ werden nebeneinander auf einer Schaumplatte der Scheibendicke
-angeordnet (Platte Länge/Höhe, sonst Verfahrweg); passen nicht alle, hält das
-Programm mit `M0` an und nennt die nächste Platte – Programmseite zeigt die
-Aufforderung, „Weiter“ setzt fort; verlaufend zwischen den beiden
+angeordnet (Platte Länge/Höhe, sonst Verfahrweg), der Draht fährt zwischen
+ihnen um die schon geschnittenen herum; passen nicht alle, gibt es **ein
+Programm je Platte** (`…_platte1.nc`, `_platte2.nc`): die Programmseite zeigt
+nach dem Ende von Platte 1, welche Platte einzulegen ist, und lädt Platte 2
+erst über „Nächste Platte laden…“ – dann wie immer Start; verlaufend zwischen den beiden
 Schnittflächen (Sehnenfehler je Scheibe im Ergebnis) oder prismatisch;
 Holmnut von oben/unten in Körperkoordinaten, also in jeder Scheibe an
 derselben Stelle – Rümpfe und große Flügel aus Schaumscheiben auf Holmen;

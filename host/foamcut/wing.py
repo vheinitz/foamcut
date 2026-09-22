@@ -385,6 +385,7 @@ class WingPath:
     faces: list = field(default_factory=list)       # [(s, profile points)] at both block faces
     notes: list[str] = field(default_factory=list)
     boards: list = field(default_factory=list)      # slices: one WingPath-bearing Board per foam board
+    programs: list = field(default_factory=list)    # [(name, gcode)] when a job is several programs (one per board)
 
     def section(self, s: float) -> list[Point]:
         """The profile the wire cuts in the plane at span position s."""

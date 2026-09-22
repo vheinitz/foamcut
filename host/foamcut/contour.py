@@ -26,7 +26,14 @@ from .svg import SvgError, load_svg
 from .wing import (Model, WingError, WingPath, _template, emit_gcode, field_catalogue, from_text, loft, to_text)
 
 Point = tuple[float, float]
-CLEARANCE = 1.5         # mm the wire keeps from a cut piece when travelling past it
+CLEARANCE = 1.5         # mm between the travel channel and a cut piece's channel
+
+
+def clearance(kerf: float) -> float:
+    """Distance the travel path keeps from a piece's cut path: both melt a
+    channel of `kerf`, so the paths need a full kerf between them plus a
+    little foam that stays."""
+    return kerf + CLEARANCE
 
 FIELDS = [
     ("zeichnung", "Zeichnung", [
@@ -256,13 +263,15 @@ class Part:
 
     @property
     def port(self) -> Point:
-        """Where the wire waits behind the piece before entering / after leaving."""
-        return (min(q[0] for q in self.hull) - CLEARANCE, self.a[0][1])
+        """Where the wire waits before entering / after leaving: the rearmost
+        vertex of the piece's own hull, so travel legs start and end on hull
+        boundaries and never inside another hull (the packing keeps hulls apart)."""
+        return min(self.hull, key=lambda q: (q[0], abs(q[1] - self.a[0][1])))
 
 
-def part_from_outline(o: Outline, tab: float = 0.0, label: str = "") -> Part:
+def part_from_outline(o: Outline, tab: float = 0.0, label: str = "", kerf: float = 0.0) -> Part:
     path = _cut_outline(o, tab)
-    return Part(path, list(path), geom.grow(geom.convex_hull(o.loop), CLEARANCE), label)
+    return Part(path, list(path), geom.grow(geom.convex_hull(o.loop), clearance(kerf)), label)
 
 
 def route_parts(parts: list[Part], entry: Point) -> tuple[list[Point], list[Point], list[int]]:
@@ -278,7 +287,9 @@ def route_parts(parts: list[Part], entry: Point) -> tuple[list[Point], list[Poin
         k = min(todo, key=lambda k: math.dist(pos, parts[k].port))
         todo.remove(k); order.append(k)
         part = parts[k]
-        obstacles = [q.hull for j, q in enumerate(parts) if j != k]
+        # every hull is an obstacle, the target's too: the wire must not cross
+        # a piece before cutting it any more than after
+        obstacles = [q.hull for q in parts]
         leg = geom.route(pos, part.port, obstacles)
         leg = leg[1:] if pa else leg
         pa.extend(leg); pb.extend(leg)
@@ -294,7 +305,7 @@ def plan(loops: list[list[Point]], kerf: float, entry_x: float, tab: float = 0.0
     """All outlines as one path from the entry point (entry_x, y of the
     rearmost outline) and back to it, in the drawing's coordinates."""
     outlines = classify(loops, kerf)
-    parts = [part_from_outline(o, tab) for o in outlines]
+    parts = [part_from_outline(o, tab, kerf=kerf) for o in outlines]
     entry = (entry_x, outlines[0].loop[outlines[0].rear][1])
     path, _, order = route_parts(parts, entry)
     notes = [f"{len(outlines)} Teil(e), {sum(len(o.holes) for o in outlines)} Loch/Loecher, "

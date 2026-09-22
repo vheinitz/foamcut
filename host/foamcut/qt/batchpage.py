@@ -19,6 +19,7 @@ from .wingpage import ERR_STYLE, LAYER_COLUMNS, WARN_STYLE, _ignore_width
 
 class BatchPage(QWidget):
     gcode_ready = pyqtSignal(str, str)
+    queue_ready = pyqtSignal(list)              # unused here; MainWindow wires every design page alike
 
     def __init__(self, machine: Machine, airfoil_dir: Path, state: UiState, log, parent=None):
         super().__init__(parent)
