@@ -5,7 +5,16 @@ Every edit is anchored on an exact upstream line and verified: if upstream
 changes a line we depend on, this script fails loudly instead of silently
 producing a firmware with the wrong pin map.
 
-    ./configure.py <path-to-grbl-Mega-5X-checkout>
+    ./configure.py <path-to-grbl-Mega-5X-checkout> [--serial usb|esp] [--hw-limits]
+
+--serial esp   grbl talks on UART1 (TX1 = D18, RX1 = D19 on EXP1 pins 1/2)
+               instead of UART0 (the USB chip): for an ESP32 running ESP3D
+               in front of the board, see docs/esp32.md. The USB port is
+               then silent.
+--hw-limits    ENABLE_RAMPS_HW_LIMITS: $21=1 stops the machine from inside
+               the firmware when a switch is hit during a move (polled in
+               the stepper ISR - no pin change interrupt on the GT2560).
+               Needed as soon as programs run without the PC watching.
 """
 import re
 import sys
@@ -65,15 +74,34 @@ class File:
         self.path.write_text(self.text)
 
 
-def main(root):
+SERIAL_REGS = ["UDR0", "UCSR0A", "UCSR0B", "UBRR0H", "UBRR0L", "U2X0", "RXEN0", "TXEN0", "RXCIE0", "UDRIE0"]
+
+
+def main(root, serial="usb", hw_limits=False):
     grbl = root / "grbl"
     if not (grbl / "config.h").exists():
         raise PatchError(f"{root} does not look like a grbl-Mega-5X checkout")
 
     overlay = Path(__file__).parent / "overlay" / "cpu_map_gt2560.h"
     target = grbl / "cpu_map_gt2560.h"
-    target.write_text(overlay.read_text())
-    print(f"  [ok] installed {target.name}")
+    text = overlay.read_text()
+    if serial == "esp":
+        text = text.replace("USART0_RX_vect", "USART1_RX_vect").replace("USART0_UDRE_vect", "USART1_UDRE_vect")
+    target.write_text(text)
+    print(f"  [ok] installed {target.name}" + (" (UART1)" if serial == "esp" else ""))
+
+    # ------------------------------------------------------------- serial.c --
+    if serial == "esp":
+        sc = File(grbl / "serial.c")
+        for reg in SERIAL_REGS:
+            n = len(re.findall(rf"\b{reg}\b", sc.text))
+            if n == 0:
+                raise PatchError(f"serial.c: register {reg} not found - upstream changed, update configure.py")
+            sc.text = re.sub(rf"\b{reg}\b", reg.replace("0", "1", 1), sc.text)
+        sc.text = "// foamcut: UART1 (D18/D19, EXP1) instead of the USB UART0 - see docs/esp32.md\n" + sc.text
+        sc.edits += 1
+        print("  [ok] serial.c: UART0 registers -> UART1")
+        sc.save()
 
     # ------------------------------------------------------------ cpu_map.h --
     cm = File(grbl / "cpu_map.h")
@@ -94,6 +122,9 @@ def main(root):
         "//#define CPU_MAP_2560_RAMPS_BOARD\n#define CPU_MAP_2560_GT2560\n" + FOAMCUT_BLOCK,
         why="select the GT2560 pin map",
     )
+    if hw_limits:
+        cf.sub("//#define ENABLE_RAMPS_HW_LIMITS\n", "#define ENABLE_RAMPS_HW_LIMITS   // foamcut: --hw-limits\n",
+               why="hard limits polled in the stepper ISR ($21=1 works)")
     cf.sub("#define N_AXIS 5", "#define N_AXIS 4", why="N_AXIS = 4")
     cf.sub("#define N_AXIS_LINEAR 3", "#define N_AXIS_LINEAR 4",
            why="all four axes are linear")
@@ -154,11 +185,19 @@ def main(root):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    serial, hw = "usb", False
+    if "--hw-limits" in args:
+        hw = True; args.remove("--hw-limits")
+    if "--serial" in args:
+        i = args.index("--serial")
+        serial = args[i + 1] if i + 1 < len(args) else ""
+        del args[i:i + 2]
+    if len(args) != 1 or serial not in ("usb", "esp"):
         print(__doc__)
         sys.exit(2)
     try:
-        main(Path(sys.argv[1]).resolve())
+        main(Path(args[0]).resolve(), serial=serial, hw_limits=hw)
     except PatchError as e:
         print(f"configure: ERROR: {e}", file=sys.stderr)
         sys.exit(1)

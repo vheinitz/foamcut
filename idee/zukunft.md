@@ -40,7 +40,10 @@ Stand 2026-09-17. Nur Ideen zum Festhalten; Reihenfolge ohne Priorität.
 - WLAN-fähiger Controller am GT2560 (ESP32 als seriell-WLAN-Brücke, sonst
   Raspberry Pi mit dem Host), damit die Maschine draußen ohne angeschlossenen
   Laptop läuft; Programme per Browser/Handy übertragen und starten.
-  Idee vom 2026-09-21 (Valentin), noch nicht bewertet.
+  Idee vom 2026-09-21 (Valentin). Umgesetzt am 2026-09-22 als ESP32 + ESP3D:
+  grbl-Variante UART1, `tcp://`-Verbindung, Job-Kopfzeile, Programmseite
+  `esp32/foamcut.html`, CLI `foamcut esp` – siehe `docs/esp32.md`; Hardware
+  noch nicht angeschlossen, Prüfliste dort.
 
 ## Schnittbreite abhängig von Geschwindigkeit (und Leistung, Schaum, Temperatur)
 Idee vom 2026-09-21 (Valentin): „Wenn man die Kalibrierung mit einem
@@ -140,6 +143,9 @@ Einschätzung (Claude, 2026-09-23):
   wiederverwendet.
 - Reihenfolge: erst SVG-Kontur (prismatisch, sofort nützlich), dann
   STL-Scheiben mit Loft.
+- Umgesetzt am 2026-09-22: Seiten „Kontur“ (`.contour`, SVG) und „Scheiben“
+  (`.slices`, STL, verlaufend oder prismatisch), beide auch im Schachteln.
+  Offen: Holmnuten in allen Scheiben an gleicher Stelle, Haltestege.
 
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.

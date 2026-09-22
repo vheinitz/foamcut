@@ -445,6 +445,37 @@ def cmd_slices(args) -> int:
     return _cmd_design(args, SLICE_MODEL, "slices")
 
 
+def cmd_esp(args) -> int:
+    """Programs on an ESP32/ESP3D in front of the board: list, upload, start, watch."""
+    from .esp import Esp3d, EspError
+    e = Esp3d(args.host)
+    try:
+        if args.esp_action == "ls":
+            jobs = e.jobs()
+            if not jobs:
+                print("keine Programme im ESP-Flash")
+            for j in jobs:
+                print(f"{j.name:32s} Block {j.block or '?':>12s}  X={j.x or '?':>4s} Tisch Y={j.y or '?':>4s}  "
+                      f"Wurzel {j.root or '?'}  {j.time or '?'}  {j.title}")
+        elif args.esp_action == "put":
+            for f in args.files:
+                print(e.upload(Path(f)).strip() or f"hochgeladen: {f}")
+        elif args.esp_action == "start":
+            print(e.start(args.files[0]).strip())
+        elif args.esp_action in ("pause", "resume", "abort"):
+            print(e.stream(args.esp_action))
+        else:
+            st = e.stream()
+            print(st)
+    except EspError as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
+    except IndexError:
+        print("error: Dateiname fehlt", file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_nest(args) -> int:
     """Several parts in one block from a .batch list -> one program."""
     from . import nest as ns
@@ -801,6 +832,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--airfoils", default="airfoil", help=argparse.SUPPRESS)
     c.add_argument("--template", action="store_true", help="print a spec template")
     c.set_defaults(func=cmd_slices)
+
+    c = sub.add_parser("esp", help="programs on an ESP32 running ESP3D: ls | put FILE.. | start NAME | status | pause | resume | abort")
+    c.add_argument("esp_action", choices=["ls", "put", "start", "status", "pause", "resume", "abort"])
+    c.add_argument("files", nargs="*", help="files to upload, or the program name to start")
+    c.add_argument("--host", default="foamcut.local", help="ESP3D host name or IP (default foamcut.local)")
+    c.set_defaults(func=cmd_esp)
 
     c = sub.add_parser("nest", help="several saved parts stacked in one block -> one program")
     c.add_argument("batch", nargs="?", help=".batch list (foamcut nest --template)")
