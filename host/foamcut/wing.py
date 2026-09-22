@@ -16,11 +16,14 @@ The spec is plain text, `key = value` per line, see TEMPLATE.
 from __future__ import annotations
 
 import math
+import re
+import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import AXES
 from . import airfoil as af
+from . import geom
 from .machine import Machine
 
 # (key, label, unit, default, help) - the one place parameters are described.
@@ -70,6 +73,16 @@ FIELDS = [
         ("hinge_v", "Kerbe unten", "mm", "0",
          "Breite der V-Kerbe an der Unterseite, damit das Ruder nach unten ausschlagen kann. "
          "0 = gerader Schlitz (nur Schnittbreite).", "num"),
+    ]),
+    ("holm", "Holme", [
+        ("spars", "Holme", "", "",
+         "Aussparungen fuer Holzleisten, mehrere mit Semikolon getrennt: '<Lage> <wo> <b>x<h>'. "
+         "Lage = Abstand der Nutmitte von der Nasenleiste; mit % bezogen auf die oertliche Tiefe "
+         "(waechst bei Zuspitzung mit), ohne % in mm. wo = oben | unten (Nut von der Haut aus) oder "
+         "innen (geschlossenes Loch, mittig zwischen Ober- und Unterseite). b x h in mm, das Mass der "
+         "Leiste. Beispiel: 30% oben 6x4; 35% innen 8x8. Leer = keine. Innenloecher schneidet der Draht "
+         "nicht mit (er muesste den Fluegel aufschlitzen) - sie stehen aber im STL und damit in den "
+         "Rippen, die man aus Scheiben schneidet.", "text"),
     ]),
     ("lage", "Lage im Schneider", [
         ("root_gap", "Wurzelebene ab Turm", "mm", "150",
@@ -236,6 +249,7 @@ class WingSpec:
     block_y: float | None = None        # legacy input: the block bottom used to be free, now it is the table
     block_h: float | None = None
     points: int = 60
+    spars: str = ""
     margin: float = 10.0
     aileron: float = 0.0                # % of chord, 0 = no hinge cut
     hinge_skin: float = 1.5
@@ -318,6 +332,89 @@ def _y_at(pts: list[Point], x: float) -> float:
 
 
 AILERON_STEPS = 6        # points along the lower-surface channel to and from the hinge
+
+
+@dataclass
+class Spar:
+    """One wooden spar: where its slot sits in the profile and how big it is."""
+    dist: float                 # from the leading edge, mm or percent of chord
+    rel: bool                   # True: dist is a percentage of the local chord
+    where: str                  # oben | unten | innen
+    w: float
+    h: float
+
+    def x(self, chord: float, te_x: float) -> float:
+        """Centre of the slot in machine X (the LE sits at te_x + chord)."""
+        d = chord * self.dist / 100.0 if self.rel else self.dist
+        return te_x + chord - d
+
+
+_SPAR_RE = re.compile(r"^\s*([-+]?[\d.,]+)\s*(%?)\s+(oben|unten|innen)\s+([\d.,]+)\s*[xX*]\s*([\d.,]+)\s*$")
+
+
+def parse_spars(text: str) -> list[Spar]:
+    """'30% oben 6x4; 35% innen 8x8' -> [Spar, ...]"""
+    out = []
+    for part in (text or "").replace("\n", ";").split(";"):
+        if not part.strip():
+            continue
+        m = _SPAR_RE.match(part)
+        if not m:
+            raise WingError(f"Holm {part.strip()!r}: erwartet '<Lage>[%] oben|unten|innen <b>x<h>'")
+        num = lambda t: float(t.replace(",", "."))
+        spar = Spar(num(m.group(1)), m.group(2) == "%", m.group(3), num(m.group(4)), num(m.group(5)))
+        if spar.w <= 0 or spar.h <= 0:
+            raise WingError(f"Holm {part.strip()!r}: Breite und Hoehe muessen > 0 sein")
+        out.append(spar)
+    return out
+
+
+def apply_spars(loop: list[Point], chord: float, te_x: float, spars: list[Spar],
+                notches: bool = True, holes: bool = True) -> tuple[list[Point], list[list[Point]], list[int]]:
+    """Cut the spar slots into one profile. Returns the outer walk (still
+    starting at the trailing edge), the closed hole loops and the walk indices
+    of the slot corners - the loft needs them to pair both sides up."""
+    outer = loop[:-1] if len(loop) > 1 and math.dist(loop[0], loop[-1]) < 1e-9 else list(loop)
+    te = outer[0]
+    cw = geom.signed_area(outer) < 0              # airfoil loops run clockwise; notch() wants CCW
+    if cw:
+        outer = list(reversed(outer))
+    hole_loops: list[list[Point]] = []
+    keys: list[int] = []
+    for spar in sorted(spars, key=lambda s: -s.x(chord, te_x)):     # from the nose backwards
+        x = spar.x(chord, te_x)
+        x1, x2 = x - spar.w / 2, x + spar.w / 2
+        try:
+            if spar.where == "innen":
+                if not holes:
+                    continue
+                lo = geom.surface_y(outer, x1, False), geom.surface_y(outer, x2, False)
+                hi = geom.surface_y(outer, x1, True), geom.surface_y(outer, x2, True)
+                yc = (min(lo) + max(hi)) / 2
+                loop_h = geom.rect(x1, yc - spar.h / 2, x2, yc + spar.h / 2)
+                if any(not geom.inside(q, outer) for q in loop_h):
+                    raise ValueError("Loch passt nicht in das Profil")
+                hole_loops.append(loop_h)
+            else:
+                if not notches:
+                    continue
+                top = spar.where == "oben"
+                ys = (geom.surface_y(outer, x1, top), geom.surface_y(outer, x2, top))
+                # measure from the shallower end, so the slot is at least h deep
+                y0 = (min(ys) - spar.h) if top else (max(ys) + spar.h)
+                outer, _ = geom.notch(outer, x1, x2, y0, spar.where)
+        except ValueError as e:
+            raise WingError(f"Holm bei {spar.dist:g}{'%' if spar.rel else ' mm'} "
+                            f"(Profiltiefe {chord:g} mm): {e}") from None
+    if cw:
+        outer = list(reversed(outer))
+    if spars and outer[0] != te:                    # a notch rotates the loop - start at the TE again
+        k = min(range(len(outer)), key=lambda i: math.dist(outer[i], te))
+        outer = outer[k:] + outer[:k]
+    for i, q in enumerate(outer):
+        if all(abs(q[0] - r[0]) > 1e-9 or abs(q[1] - r[1]) > 1e-9 for r in loop):
+            keys.append(i)                          # a point the notch added
+    return outer + [outer[0]], hole_loops, keys
 
 
 def _profile_mm(loop_dat: list[Point], chord: float, te_x: float, chord_y: float,
@@ -544,6 +641,32 @@ def build_path(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> WingPath:
     ail = (spec.aileron, spec.hinge_skin, spec.hinge_v) if spec.aileron > 0 else None
     root = _profile_mm(loop_r, spec.root_chord, te_x, 0.0, 0.0, machine.kerf_mm, ail)
     tip = _profile_mm(loop_t, spec.tip_chord, tip_te_x, 0.0, spec.washout, machine.kerf_mm, ail)
+    spars = parse_spars(spec.spars)
+    spar_notes: list[str] = []
+    if spars:
+        # the wire cuts the slots that open to the skin; a closed hole would
+        # mean slitting the wing open, so it only goes into the STL
+        root, _, keys_r = apply_spars(root, spec.root_chord, te_x, spars, holes=False)
+        tip, _, keys_t = apply_spars(tip, spec.tip_chord, tip_te_x, spars, holes=False)
+        if keys_r or keys_t:
+            n = max(len(root), len(tip)) - 1
+            kr = sorted({0} | set(keys_r)); kt = sorted({0} | set(keys_t))
+            if len(kr) == len(kt):
+                counts = geom.segment_counts(root[:-1], kr, n)
+                root = geom.resample_keyed(root[:-1], kr, counts)
+                tip = geom.resample_keyed(tip[:-1], kt, counts)
+            else:
+                raise WingError("Holmnut liegt an der Wurzel und am Ende verschieden - "
+                                "Lage in % angeben oder Holm schmaler machen")
+        cut = [sp for sp in spars if sp.where != "innen"]
+        inner = [sp for sp in spars if sp.where == "innen"]
+        if cut:
+            spar_notes.append("Holmnuten: " + ", ".join(
+                f"{sp.dist:g}{'%' if sp.rel else ' mm'} {sp.where} {sp.w:g}x{sp.h:g}" for sp in cut))
+        if inner:
+            spar_notes.append("Innenloecher (" + ", ".join(
+                f"{sp.dist:g}{'%' if sp.rel else ' mm'} {sp.w:g}x{sp.h:g}" for sp in inner)
+                + ") sind nur im STL - der Draht kaeme nicht hinein, ohne den Fluegel aufzuschlitzen")
     if spec.mirror:
         # upside down about the chord line; turning the cut piece over about its
         # chord axis then gives the mirror-image (opposite-hand) panel
@@ -551,6 +674,7 @@ def build_path(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> WingPath:
         tip = [(x, -y) for x, y in tip]
 
     path = loft(spec, root, tip, machine, mirrored=spec.mirror)
+    path.notes.extend(spar_notes)
     if ail:
         path.notes.append(f"Ruderschnitt: Scharnier bei {spec.aileron:g} % der Tiefe ab Hinterkante, "
                           f"Haut {spec.hinge_skin:g} mm, Kerbe {spec.hinge_v:g} mm - ueber die ganze Blockbreite")
@@ -586,6 +710,76 @@ def _resolve(name: str, airfoil_dir: Path) -> Path:
 
 
 # -------------------------------------------------------------- g-code ------
+def _sections(spec: WingSpec, machine: Machine, airfoil_dir: Path):
+    """Root and tip of the finished part (no kerf - this is the wing, not the
+    wire path): outer loop and hole loops, in profile coordinates."""
+    root_file = airfoil_dir / spec.root_airfoil
+    tip_file = airfoil_dir / (spec.tip_airfoil or spec.root_airfoil)
+    _, r_up, r_lo = af.load(root_file)
+    _, t_up, t_lo = af.load(tip_file)
+    loop_r = af.resample_loop(r_up, r_lo, spec.points)
+    loop_t = af.resample_loop(t_up, t_lo, spec.points)
+    te_x = 0.0
+    tip_te_x = spec.root_chord - spec.sweep - spec.tip_chord
+    ail = (spec.aileron, spec.hinge_skin, spec.hinge_v) if spec.aileron > 0 else None
+    root = _profile_mm(loop_r, spec.root_chord, te_x, 0.0, 0.0, 0.0, ail)
+    tip = _profile_mm(loop_t, spec.tip_chord, tip_te_x, 0.0, spec.washout, 0.0, ail)
+    spars = parse_spars(spec.spars)
+    root, holes_r, keys_r = apply_spars(root, spec.root_chord, te_x, spars)
+    tip, holes_t, keys_t = apply_spars(tip, spec.tip_chord, tip_te_x, spars)
+    if keys_r or keys_t:
+        n = max(len(root), len(tip)) - 1
+        kr = sorted({0} | set(keys_r)); kt = sorted({0} | set(keys_t))
+        if len(kr) != len(kt):
+            raise WingError("Holmnut liegt an der Wurzel und am Ende verschieden - Lage in % angeben")
+        counts = geom.segment_counts(root[:-1], kr, n)
+        root = geom.resample_keyed(root[:-1], kr, counts)
+        tip = geom.resample_keyed(tip[:-1], kt, counts)
+    return root, tip, holes_r, holes_t
+
+
+def to_stl(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> bytes:
+    """The wing panel as a binary STL: x forward (chord), y up (thickness),
+    z along the span from the root (0) to the tip (`panel`). Spar slots and
+    holes are in it, so slicing the file gives ribs with the slots."""
+    root, tip, holes_r, holes_t = _sections(spec, machine, airfoil_dir)
+    span = spec.panel
+    tris: list[tuple] = []
+
+    def wall(a2: list[Point], b2: list[Point], flip: bool):
+        n = len(a2)
+        for i in range(n):
+            j = (i + 1) % n
+            p0 = (a2[i][0], a2[i][1], 0.0); p1 = (a2[j][0], a2[j][1], 0.0)
+            q0 = (b2[i][0], b2[i][1], span); q1 = (b2[j][0], b2[j][1], span)
+            quad = [(p0, p1, q1), (p0, q1, q0)]
+            tris.extend([(c, b, a) for a, b, c in quad] if flip else quad)
+    wall(root[:-1], tip[:-1], False)
+    for hr, ht in zip(holes_r, holes_t):
+        wall(hr, ht, True)                     # a hole faces the other way
+    for pts2, holes, z, flip in ((root[:-1], holes_r, 0.0, True), (tip[:-1], holes_t, span, False)):
+        if holes:
+            walk, exact = geom.bridge_holes(list(pts2), [list(h) for h in holes])
+        else:
+            walk = exact = list(pts2)
+        for a, b, c in geom.triangulate(walk):
+            p0, p1, p2 = exact[a], exact[b], exact[c]
+            if abs((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])) < 1e-9:
+                continue                       # sliver along a slit: zero area once the slit is closed
+            face = ((p0[0], p0[1], z), (p1[0], p1[1], z), (p2[0], p2[1], z))
+            tris.append(tuple(reversed(face)) if flip else face)
+    head = (f"foamcut wing {spec.root_airfoil} {spec.root_chord:g} -> "
+            f"{spec.tip_airfoil or spec.root_airfoil} {spec.tip_chord:g}, Panel {span:g} mm").encode()[:79]
+    out = bytearray(head.ljust(80, b" ")) + struct.pack("<I", len(tris))
+    for a, b, c in tris:
+        out += struct.pack("<3f", 0.0, 0.0, 0.0) + struct.pack("<9f", *a, *b, *c) + b"\0\0"
+    return bytes(out)
+
+
+def stl_name(spec: WingSpec) -> str:
+    return wing_name(spec)[:-3] + ".stl"
+
+
 def wing_name(spec: WingSpec) -> str:
     """File name for a generated program, e.g. clarky_100-80_400.nc / ..._sp.nc."""
     return (f"{spec.root_airfoil.rsplit('.', 1)[0]}_{spec.root_chord:g}-{spec.tip_chord:g}_{spec.panel:g}"
@@ -605,6 +799,8 @@ class Model:
     from_text: object           # text -> values
     template: str
     file_filter: str
+    stl: object = None          # (spec, machine, airfoil_dir) -> bytes, if the model can export a body
+    stl_name: object = None
     preview: object = None      # spec -> data for an ObjectView / MeshView (None: no "Objekt" tab)
     preview_kind: str = ""      # "loops" (2D outlines) or "mesh" (triangles)
 
@@ -722,5 +918,5 @@ def _wing_values_from_file(self, text: str, machine: Machine, airfoil_dir: Path)
 
 
 WING_MODEL = Model("Flügel", "wing", FIELDS, WingSpec.parse, generate, wing_name, to_text, from_text,
-                   TEMPLATE, "wing (*.wing);;alle (*)")
+                   TEMPLATE, "wing (*.wing);;alle (*)", stl=to_stl, stl_name=stl_name)
 WING_MODEL.values_from_file = _wing_values_from_file.__get__(WING_MODEL)

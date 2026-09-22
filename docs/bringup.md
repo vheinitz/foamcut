@@ -66,7 +66,13 @@ Tastatur im Jog: `a/d` X, `s/w` Y, `j/l` U, `k/i` V, `1`..`4` Schrittweite
 Heizdraht und Schnittwerte; hier stehen auch Turmabstand und der Turm mit
 dem festen Draht – sie gelten für alle Entwürfe), **Flügel** (Schritte links, Zeichnung rechts live, Warnungen
 inline, letzte Werte gemerkt; Schritt *Block* nennt Mindestblock und
-Tischhöhe/-ausdehnung), **Formen** (freie Querschnitte je Seite, Scheibe
+Tischhöhe/-ausdehnung; Schritt *Holme* schneidet Nuten für Holzleisten von
+oben/unten und legt innen liegende Löcher an – „30% oben 6x4; 35% innen 8x8“,
+Lage in % wächst mit der Zuspitzung mit. „STL speichern…“ gibt den Flügel als
+Körper aus, mit Nuten und Löchern: daraus lassen sich später auf der Seite
+*Scheiben* Rippen schneiden und mit Holzleisten zu einem größeren Flügel
+zusammensetzen. Innenlöcher schneidet der Draht am Flügel selbst nicht – er
+käme nicht hinein, ohne ihn aufzuschlitzen), **Formen** (freie Querschnitte je Seite, Scheibe
 oder Ring – Rumpfsegmente), **Kontur** (SVG-Zeichnung aus Inkscape als
 Parallelschnitt X=U/Y=V: Buchstaben, Silhouetten; Löcher über einen Schlitz
 nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),

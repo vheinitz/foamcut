@@ -327,50 +327,12 @@ def _orient(loops: list[list[Point]], mirror: bool) -> list[list[Point]]:
     return loops
 
 
-def notch(loop: list[Point], x1: float, x2: float, y_end: float, side: str) -> tuple[list[Point], list[int]]:
-    """Cut a spar slot into a CCW loop: from the top (side 'oben') or bottom
-    edge between x1 < x2 down/up to y_end. Returns the new loop and the
-    indices of its four slot corners (edge, bottom, bottom, edge)."""
-    if x1 >= x2:
-        raise WingError("Holmnut: Breite muss > 0 sein")
-    top = side == "oben"
-    m = len(loop)
-
-    def crossing(x):
-        best = None
-        for i in range(m):
-            a, b = loop[i], loop[(i + 1) % m]
-            if a[0] == b[0] or (a[0] - x) * (b[0] - x) > 0:
-                continue
-            y = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])
-            if best is None or (y > best[0] if top else y < best[0]):
-                best = (y, i)
-        if best is None:
-            raise WingError(f"Holmnut bei X={x:g} liegt ausserhalb des Querschnitts")
-        return best
-    (ya, ea), (yb, eb) = crossing(x1), crossing(x2)
-    if (y_end >= min(ya, yb)) if top else (y_end <= max(ya, yb)):
-        raise WingError(f"Holmnut: Nutgrund Y={y_end:g} liegt nicht innerhalb des Querschnitts")
-    # rebuild with the two crossings as vertices, in order along their edges
-    pts: list[Point] = []
-    idx = {}
-    for i in range(m):
-        pts.append(loop[i])
-        here = [(key, (x, y)) for key, (y, e), x in (("a", (ya, ea), x1), ("b", (yb, eb), x2)) if e == i]
-        here.sort(key=lambda kv: math.dist(loop[i], kv[1]))
-        for key, pt in here:
-            idx[key] = len(pts); pts.append(pt)
-    n = len(pts)
-    ia, ib = idx["a"], idx["b"]
-    # CCW runs right-to-left along the top and left-to-right along the bottom:
-    # the stretch to replace goes from b to a on top, from a to b at the bottom
-    start, end = (ib, ia) if top else (ia, ib)
-    kept = []
-    k = end
-    while k != start:
-        kept.append(pts[k]); k = (k + 1) % n
-    new = [pts[start], (pts[start][0], y_end), (pts[end][0], y_end)] + kept
-    return new, [0, 1, 2, 3]
+def notch(loop, x1, x2, y_end, side):
+    """Spar slot in a section - see geom.notch (WingError for the GUI)."""
+    try:
+        return geom.notch(loop, x1, x2, y_end, side)
+    except ValueError as e:
+        raise WingError(f"Holmnut: {e}") from None
 
 
 def _spar(spec: SliceSpec):
@@ -814,4 +776,5 @@ def preview(spec: SliceSpec):
 
 
 SLICE_MODEL = Model("Scheiben", "slices", FIELDS, SliceSpec.parse, generate, slice_name, slice_to_text,
-                    slice_from_text, TEMPLATE, "slices (*.slices);;alle (*)", preview, "mesh")
+                    slice_from_text, TEMPLATE, "slices (*.slices);;alle (*)",
+                    preview=preview, preview_kind="mesh")

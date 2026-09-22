@@ -106,6 +106,7 @@
        <property name="styleSheet"><string>color:#b00; font-weight:bold;</string></property>
       </widget>
      </item>
+     <item><widget class="QPushButton" name="b_stl"><property name="text"><string>STL speichern…</string></property><property name="toolTip"><string>Das fertige Teil als 3D-Körper (STL) - zum Ansehen oder um es später in Scheiben (Rippen) zu schneiden.</string></property></widget></item>
      <item><widget class="QPushButton" name="b_gcode"><property name="text"><string>G-Code speichern…</string></property></widget></item>
      <item><widget class="QPushButton" name="b_prog"><property name="text"><string>→ Programm</string></property></widget></item>
     </layout>

@@ -137,7 +137,7 @@ def test_notch_cuts_a_slot_from_the_chosen_edge():
     assert [new[k] for k in keys] == [(15, 0.0), (15, 8), (21, 8), (21, 0.0)]
     with pytest.raises(WingError, match="ausserhalb"):
         sl.notch(square, 50, 56, 12, "oben")
-    with pytest.raises(WingError, match="Nutgrund"):
+    with pytest.raises(WingError, match="Grund"):
         sl.notch(square, 15, 21, 25, "oben")
 
 

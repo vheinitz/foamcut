@@ -428,7 +428,7 @@ def test_every_field_has_a_label_unit_and_help():
     for _, _, fields in FIELDS:
         for key, label, unit, default, help_, kind in fields:
             assert label and help_, key
-            assert kind in ("num", "int", "airfoil", "bool"), key
+            assert kind in ("num", "int", "airfoil", "bool", "text") or kind.startswith(("choice:", "file:")), key
             assert hasattr(WingSpec(), key), key
 
 
@@ -520,3 +520,67 @@ def test_every_program_carries_a_machine_readable_job_line():
     mb = path.min_block
     assert kv["block"] == f"{mb[2]:.0f}x{mb[3]:.0f}x{mb[5]:.0f}" and kv["x"] == "20" and kv["root"] == "T2"
     assert kv["time"].endswith("min") and kv["travel"].startswith("X0..")
+
+
+# --------------------------------------------------------------- spars ----
+def test_spar_syntax():
+    from foamcut.wing import parse_spars
+    a, b = parse_spars("30% oben 6x4; 12 innen 8x5")
+    assert (a.dist, a.rel, a.where, a.w, a.h) == (30.0, True, "oben", 6.0, 4.0)
+    assert (b.dist, b.rel, b.where) == (12.0, False, "innen")
+    assert parse_spars("") == [] and parse_spars("  ") == []
+    for bad in ("30% schraeg 6x4", "oben 6x4", "30% oben 6", "30% oben 0x4"):
+        with pytest.raises(WingError):
+            parse_spars(bad)
+
+
+def test_spar_notch_is_cut_and_scales_with_the_chord():
+    plain = build_path(spec(), machine(kerf=0.0), AIRFOILS)
+    s = spec(spars="30% oben 6x4")
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
+    assert len(p.root) == len(p.tip)                      # both sides still pair point for point
+    assert any("Holmnuten" in n for n in p.notes)
+
+    def slot(pts, chord, te_x):
+        x = te_x + chord - 0.30 * chord
+        top = max(q[1] for q in pts)
+        floor = [q for q in pts if abs(q[0] - (x - 3)) < 1e-6 or abs(q[0] - (x + 3)) < 1e-6]
+        assert floor, (x, top)
+        return min(q[1] for q in floor)
+    te_x = s.block_x + s.lead
+    # the slot sits at 30 % of the local chord on both sides, 4 mm deep
+    assert slot(p.root, s.root_chord, te_x) < max(q[1] for q in p.root)
+    assert slot(p.tip, s.tip_chord, te_x + s.root_chord - s.tip_chord) < max(q[1] for q in p.tip)
+    assert abs(max(q[1] for q in p.root) - max(q[1] for q in plain.root)) < 0.05    # skin untouched (resampled)
+
+
+def test_inner_holes_are_only_in_the_body_not_in_the_wire_path():
+    p = build_path(spec(spars="55% innen 5x4"), machine(kerf=0.0), AIRFOILS)
+    assert any("Innenloecher" in n and "STL" in n for n in p.notes)
+    assert p.root == build_path(spec(), machine(kerf=0.0), AIRFOILS).root      # cut unchanged
+
+
+def test_stl_is_a_watertight_body_with_the_spar_slots():
+    from collections import Counter
+    from foamcut import geom, slices as sl
+    from foamcut.wing import to_stl
+    s = spec(spars="30% oben 6x4; 55% innen 5x4", panel=400.0)
+    data = to_stl(s, machine(), AIRFOILS)
+    assert data[:7] == b"foamcut" and len(data) > 84
+    tris = sl.load_stl_bytes(data) if hasattr(sl, "load_stl_bytes") else None
+    import tempfile, pathlib
+    with tempfile.TemporaryDirectory() as d:
+        f = pathlib.Path(d) / "w.stl"; f.write_bytes(data)
+        tris = sl.load_stl(f)
+    edges = Counter()
+    for a, b, c in tris:
+        for u, v in ((a, b), (b, c), (c, a)):
+            edges[tuple(sorted((tuple(round(x, 4) for x in u), tuple(round(x, 4) for x in v))))] += 1
+    assert all(v == 2 for v in edges.values())            # closed surface: every edge exactly twice
+    for z, chord in ((1.0, s.root_chord), (399.0, s.tip_chord)):
+        loops = sl.section(tris, 2, z, 0, 1)
+        assert len(loops) == 2                            # outline plus the spar hole
+        hole = min(loops, key=lambda l: abs(geom.signed_area(l)))
+        assert abs(geom.signed_area(hole)) == pytest.approx(20.0, abs=0.1)     # 5 x 4 mm
+        outer = max(loops, key=lambda l: abs(geom.signed_area(l)))
+        assert max(q[0] for q in outer) - min(q[0] for q in outer) == pytest.approx(chord, abs=0.2)
