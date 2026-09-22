@@ -72,8 +72,9 @@ nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
 **Scheiben** (STL-Körper in Scheiben einer Dicke; Scheiben „2,3,4“, „1-5“
 oder „alle“ werden nebeneinander auf einer Schaumplatte der Scheibendicke
 angeordnet (Platte Länge/Höhe, sonst Verfahrweg): Umrisse statt Rechtecke,
-Vierteldrehungen erlaubt, kleinstes umschließendes Rechteck, Abstand zum
-Fahrweg 2 × Schnittbreite; Scheibenliste mit Enter bestätigen; der Draht
+Vierteldrehungen erlaubt, kleinstes umschließendes Rechteck, Scheiben
+2 × Schnittbreite + 0,5 mm auseinander; erst wird angeordnet, dann der
+Fahrweg gesucht (1 × Schnittbreite Abstand zu jedem Teil); Scheibenliste mit Enter bestätigen; der Draht
 fährt zwischen ihnen um die schon geschnittenen herum; passen nicht alle, gibt es **ein
 Programm je Platte** (`…_platte1.nc`, `_platte2.nc`): die Programmseite zeigt
 nach dem Ende von Platte 1, welche Platte einzulegen ist, und lädt Platte 2
