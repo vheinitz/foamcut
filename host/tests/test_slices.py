@@ -205,7 +205,7 @@ def test_travel_between_pieces_never_crosses_a_piece():
     outlines = [p.a for p in placed]
     r6 = lambda q: (round(q[0], 6), round(q[1], 6))
     piece_pts = {r6(q) for o in outlines for q in o}
-    y0 = -b.path.chord_y                                           # root is lifted by chord_y; entry line at 0
+    y0 = b.entry_y - b.path.chord_y                                # root y = board y - entry_y + chord_y
     for p, q in zip(pts, pts[1:]):
         pa, qa = (p[0], p[1] + y0), (q[0], q[1] + y0)
         if r6(pa) in piece_pts and r6(qa) in piece_pts:

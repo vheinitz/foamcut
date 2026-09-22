@@ -91,7 +91,7 @@ def test_hole_hangs_on_a_slit_straight_back():
     outer = [(0, 0), (40, 0), (40, 20), (0, 20)]
     hole = [(15, 5), (25, 5), (25, 15), (15, 15)]
     path, notes = ct.plan([outer, hole], kerf=0.0, entry_x=-10)
-    assert path[0] == (-10, 0) and path[-1] == (-10, 0)          # from the entry line and back
+    assert path[0] == (-10, 0) and path[-1][0] == -12.0          # from the entry line, out behind the face
     # the slit runs from the hole's rearmost point (15, y) straight back to x = 0
     i = path.index((15, 5))
     assert path[i - 1] == (0, 5) and path[i + 4] == (15, 5) and path[i + 5] == (0, 5)
