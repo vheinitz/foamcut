@@ -232,6 +232,37 @@ NiCr tatsächlich zu grob, ein echter Fühler ist genauer. Bedingungen:
   Weg ist dem Regler-Modul (oben) vorzuziehen, solange der PC mitläuft; ohne
   PC (ESP32) müsste der Regler in die Firmware wandern.
 
+### Nachtrag 2026-09-23: selbst gewickelter Fühler?
+Idee Valentin: „ich wickele mit Stück solchen Drahts mein Heissdraht, davor
+jedoch erhitze ich es und stecke ins Wasser. Es oxidiert und bildet eine
+Stromisolierung. Welchen Draht nehme ich dafür mit großer R-Schwankung von T?“
+
+- **Oxid als Isolator trägt nicht.** Abschrecken im Wasser sprengt den Zunder
+  eher ab (Thermoschock), als dass es eine haftende Schicht bildet; Eisen- und
+  Chromoxid sind bei Temperatur Halbleiter, keine Isolatoren. Die einzige
+  brauchbare Eigenoxidschicht ist **Al₂O₃ auf Kanthal (FeCrAl)**, und die
+  entsteht durch langsames Glühen bei ~1000 °C, nicht durch Abschrecken – beim
+  Wickeln reißt sie an den Kontaktstellen trotzdem auf. Schon einige kΩ
+  Nebenschluss zum PWM-Draht machen die Messung unbrauchbar. Also **Glimmer
+  oder Glasfaserschlauch** zwischen Fühler und Draht, das ist dünn, sicher und
+  kostet nichts.
+- **Größter Temperaturkoeffizient bei bezahlbaren Drähten:** Nickel
+  α ≈ 6000 ppm/K (+150 % bei +250 K!), Platin 3850 ppm/K (+96 %), Eisen
+  ~5000, Kupfer 4300 (oxidiert über 200 °C), Edelstahl nur 1000 ppm/K.
+  Nickeldraht wäre also das Material der Wahl – **aber**:
+- **Die Länge killt die Idee.** Der Thermistoreingang des GT2560 hat einen
+  4,7-kΩ-Pull-up; gut auflösbar ist ein Fühler von ~1 kΩ. Dafür bräuchte man
+  bei 0,05 mm Nickeldraht **28 m** (Platin 18 m, Edelstahl 2,7 m). Ein paar
+  Zentimeter um den Draht gewickelt ergeben 1–2 Ω, und 1–2 Ω an 4,7 kΩ sind
+  im ADC nicht zu sehen – das bräuchte Brücke, Konstantstromquelle und
+  Verstärker. Genau deshalb sind PT1000 **Dünnschicht-Mäander** und keine
+  Wickel: 1 kΩ auf 2 × 2 mm.
+- **Fazit:** Der Gedanke ist richtig (Draht als RTD), nur die Bauform nicht.
+  Ein Dünnschicht-PT1000 (bis 500 °C, glaspassiviert = schon isoliert, ~2 €)
+  bringt dasselbe in klein, linear und direkt am vorhandenen Eingang. Wer
+  trotzdem selbst wickeln will: Nickeldraht **in Reihe zur Messbrücke**, nicht
+  an den Thermistoreingang.
+
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.
 - Winde mit Drehzahlregelung für reproduzierbare Rampenstarts.
