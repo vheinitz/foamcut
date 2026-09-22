@@ -48,6 +48,11 @@ class BatchPage(QWidget):
         for i, (key, text) in enumerate(LAYERS):
             box = QCheckBox(text); box.setChecked(bool(shown.get(key, True))); box.toggled.connect(self._layers)
             self.layer_layout.addWidget(box, i // LAYER_COLUMNS, i % LAYER_COLUMNS); self.layer_boxes[key] = box
+        self.layer_box.setChecked(bool(state.get("batch_layerbox", True)))
+        self.layer_box.toggled.connect(lambda on: (self.state.set("batch_layerbox", on),
+                                                   [b.setVisible(on) for b in self.layer_boxes.values()]))
+        for b in self.layer_boxes.values():
+            b.setVisible(self.layer_box.isChecked())
         self._layers()
         self.messages = self.messages_layout
         self.b_load.clicked.connect(self.load_batch); self.b_save.clicked.connect(self.save_batch)
@@ -125,7 +130,7 @@ class BatchPage(QWidget):
         except ValueError:
             self._message("Keine Zahl in den Blockfeldern", ERR_STYLE); self.nest = None; self.gcode = ""; return False
         if not batch.items:
-            self.result.setText("Teile laden (.wing / .shape / .contour / .slices), dann werden sie hier gestapelt."); self.nest = None; self.gcode = ""
+            self.result.setPlainText("Teile laden (.wing / .shape / .contour / .slices), dann werden sie hier gestapelt."); self.nest = None; self.gcode = ""
             self.front.show_path(None, self.machine); self.top.show_path(None); return False
         try:
             code, nest = generate(batch, self.machine, self.airfoil_dir)
@@ -145,7 +150,7 @@ class BatchPage(QWidget):
         ext = nest.extents()
         lines = [n for n in nest.notes if not n.startswith(("Block zu", "Tisch zu"))]
         lines.append("Schlittenweg:  " + "   ".join(f"{a} {lo:.0f}..{hi:.0f}" for a, (lo, hi) in ext.items()))
-        self.result.setText("\n".join(lines))
+        self.result.setPlainText("\n".join(lines))
         if self.sent is not None:
             self.stale.setText("" if self.sent == code else "Programm ist VERALTET - erneut übergeben")
         p0 = copy.copy(nest.path)

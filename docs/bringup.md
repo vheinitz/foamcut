@@ -61,9 +61,10 @@ Ohne Endschalter kann grbl weder referenzieren noch den Verfahrweg kennen.
 Tastatur im Jog: `a/d` X, `s/w` Y, `j/l` U, `k/i` V, `1`..`4` Schrittweite
 0.1 / 1 / 10 / 50 mm, Enter fertig, `q` Abbruch.
 
-**Oder alles mit der Maus:** `foamcut gui` (Qt). Drei Seiten: **Maschine**
+**Oder alles mit der Maus:** `foamcut gui` (Qt). Seiten: **Maschine**
 (Verbindung, Jog-Pads beider Türme, Referenz, Verfahrweg, Endschalter,
-Heizdraht), **Flügel** (Schritte links, Zeichnung rechts live, Warnungen
+Heizdraht und Schnittwerte; hier stehen auch Turmabstand und der Turm mit
+dem festen Draht – sie gelten für alle Entwürfe), **Flügel** (Schritte links, Zeichnung rechts live, Warnungen
 inline, letzte Werte gemerkt; Schritt *Block* nennt Mindestblock und
 Tischhöhe/-ausdehnung), **Formen** (freie Querschnitte je Seite, Scheibe
 oder Ring – Rumpfsegmente), **Kontur** (SVG-Zeichnung aus Inkscape als

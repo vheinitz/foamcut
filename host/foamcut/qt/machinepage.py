@@ -68,6 +68,12 @@ class MachinePage(QWidget):
             w.setText(f"{getattr(machine, attr):g}")
             w.editingFinished.connect(lambda w=w, attr=attr: self._cut_setting(w, attr))
         self.power.sliderReleased.connect(self._power_changed)
+        # machine geometry: it belongs here, not on every design page
+        self.gap.setText(f"{machine.tower_gap_mm:g}"); self.gap.editingFinished.connect(self._gap_changed)
+        self.fixed.addItems(["Turm 1 (X/Y)", "Turm 2 (U/V)"])
+        self.fixed.setCurrentIndex(0 if machine.wire_fixed_tower == 1 else 1)
+        self.fixed.currentIndexChanged.connect(self._fixed_changed)
+        self.show_travel()
         # straight cut
         for b, angle in ((self.b_cut_fwd, 0.0), (self.b_cut_back, 180.0), (self.b_cut_up, 90.0), (self.b_cut_down, 270.0)):
             b.clicked.connect(lambda _, a=angle: self._cut(a))
@@ -118,14 +124,38 @@ class MachinePage(QWidget):
             setattr(self.machine, attr, val); self.machine.save()
             self.log(f"{attr} = {val:g} gespeichert (machine.json)"); self.machine_changed.emit()
 
+    def show_travel(self):
+        t = self.machine.travel_mm
+        self.travel_show.setText("   Verfahrweg " + " ".join(f"{a} {t[a]:g}" for a in AXES) + " mm"
+                                 + ("" if self.machine.tower_gap_measured else "   TURMABSTAND NICHT GEMESSEN"))
+
+    def _gap_changed(self):
+        try:
+            val = float(self.gap.text().replace(",", "."))
+            if val <= 0:
+                raise ValueError
+        except ValueError:
+            self.log("! Turmabstand muss eine Zahl > 0 sein"); self.gap.setText(f"{self.machine.tower_gap_mm:g}"); return
+        if abs(val - self.machine.tower_gap_mm) > 1e-9:
+            self.machine.tower_gap_mm = val; self.machine.tower_gap_measured = True
+            self.machine.save(); self.show_travel()
+            self.log(f"Turmabstand {val:g} mm gespeichert"); self.machine_changed.emit()
+
+    def _fixed_changed(self):
+        tower = self.fixed.currentIndex() + 1
+        if tower != self.machine.wire_fixed_tower:
+            self.machine.wire_fixed_tower = tower; self.machine.save()
+            self.log(f"Draht fest an Turm {tower} gespeichert"); self.machine_changed.emit()
+
     def _power_changed(self):
         if self.power.value() != self.machine.wire_power:
             self.machine.wire_power = self.power.value(); self.machine.save(); self.machine_changed.emit()
 
     def save_travel(self, axis):
         val = self.model.record_travel(axis)
-        self.machine.save()
+        self.machine.save(); self.show_travel()
         self.log(f"Verfahrweg {axis} = {val:g} mm gespeichert")
+        self.machine_changed.emit()
 
     # ---- updates from the worker ----------------------------------------
     def _skew(self) -> tuple[float, float]:

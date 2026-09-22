@@ -54,13 +54,11 @@ class DesignPage(QWidget):
 
         load_ui("designpage", self)      # nav, stack, layer_layout, views, messages_layout, result, bottom bar
         # ---- left: step list + stacked forms (one page per FIELDS section) --
-        for section, title, fields in model.fields + [("machine", "Maschine", [])]:
+        for section, title, fields in model.fields:
             self.nav.addItem(title)
             page = QWidget()
             form = QFormLayout(page)
             form.setVerticalSpacing(2)
-            if section == "machine":
-                self._machine_form(form)
             for key, label, unit, default, help_, kind in fields:
                 value = saved.get(key, default)
                 if kind == "airfoil":
@@ -132,6 +130,11 @@ class DesignPage(QWidget):
             box = QCheckBox(text); box.setChecked(bool(shown.get(key, True)))
             box.toggled.connect(self._layers_changed)
             self.layer_layout.addWidget(box, i // LAYER_COLUMNS, i % LAYER_COLUMNS); self.layer_boxes[key] = box
+        self.layer_box.setChecked(bool(self.state.get(f"{self.model.key}_layerbox", True)))
+        self.layer_box.toggled.connect(lambda on: (self.state.set(f"{self.model.key}_layerbox", on),
+                                                   [b.setVisible(on) for b in self.layer_boxes.values()]))
+        for b in self.layer_boxes.values():
+            b.setVisible(self.layer_box.isChecked())
         self._layers_changed()
         self.messages = self.messages_layout
 
@@ -142,30 +145,6 @@ class DesignPage(QWidget):
         QTimer.singleShot(0, self.rebuild)
 
     # ---- machine step (tower gap) ------------------------------------------
-    def _machine_form(self, form: QFormLayout):
-        self.gap = QLineEdit(f"{self.machine.tower_gap_mm:g}"); self.gap.setMaximumWidth(90)
-        self.gap.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.gap.textChanged.connect(self.schedule)
-        row = QWidget(); rl = QHBoxLayout(row); rl.setContentsMargins(0, 0, 0, 0)
-        rl.addWidget(self.gap); rl.addWidget(QLabel("mm")); rl.addStretch()
-        form.addRow("Turmabstand", row)
-        hint = QLabel("Abstand der beiden Drahtaufhängungen (Schlittenebenen), mit dem Maßband gemessen. "
-                      "Wird in machine.json gespeichert." +
-                      ("" if self.machine.tower_gap_measured else "  NOCH NICHT GEMESSEN - Platzhalter!"))
-        hint.setWordWrap(True); hint.setStyleSheet("color:#666; font-size:9pt;")
-        form.addRow("", hint)
-        self.fixed = QComboBox(); self.fixed.addItems(["Turm 1 (X/Y)", "Turm 2 (U/V)"])
-        self.fixed.setCurrentIndex(0 if self.machine.wire_fixed_tower == 1 else 1)
-        self.fixed.currentIndexChanged.connect(self.schedule)
-        form.addRow("Draht fest an", self.fixed)
-        hint2 = QLabel("An diesem Turm ist der Heizdraht fest eingespannt; am anderen zieht das Gewicht über "
-                       "die Rolle. Nur das feste Ende ist ein genauer Bezug, deshalb liegt die Flügelwurzel "
-                       "immer dort. Wird in machine.json gespeichert.")
-        hint2.setWordWrap(True); hint2.setStyleSheet("color:#666; font-size:9pt; margin-bottom:6px;")
-        form.addRow("", hint2)
-        for a in ("X", "Y", "U", "V"):
-            form.addRow(f"Verfahrweg {a}", QLabel(f"{self.machine.travel_mm[a]:g} mm   (Endschalter / Verfahrweg-Dialog)"))
-
     # ---- block step (minimal block) -------------------------------------------
     def _block_form(self, form: QFormLayout):
         self.b_minblock = QPushButton("Mindestblock übernehmen")
@@ -265,19 +244,6 @@ class DesignPage(QWidget):
                     w.setStyleSheet("")
                 except ValueError:
                     bad.append(label); w.setStyleSheet("background:#ffd6d6;")
-        try:
-            gap = float(self.gap.text().replace(",", "."))
-            if gap <= 0:
-                raise ValueError
-            if abs(gap - self.machine.tower_gap_mm) > 1e-9:
-                self.machine.tower_gap_mm = gap; self.machine.tower_gap_measured = True
-                self.machine.save(); self.log(f"Turmabstand {gap:g} mm gespeichert")
-        except ValueError:
-            bad.append("Turmabstand")
-        fixed = self.fixed.currentIndex() + 1
-        if fixed != self.machine.wire_fixed_tower:
-            self.machine.wire_fixed_tower = fixed
-            self.machine.save(); self.log(f"Draht fest an Turm {fixed} gespeichert")
         if bad:
             self._message("Keine Zahl: " + ", ".join(bad), ERR_STYLE)
             self.spec = self.path = None; self.gcode = ""
@@ -332,7 +298,7 @@ class DesignPage(QWidget):
             f"(Spannrichtung), Rückseite bei X = {bx:g}, Unterkante bei Y = {by:.1f}, ab Wurzelebene {start:g}. "
             "Der Knopf trägt diese Werte oben ein; leere Felder bedeuten ohnehin Mindestblock.")
         lines.append("Schlittenweg:  " + "   ".join(f"{a} {lo:.0f}..{hi:.0f}" for a, (lo, hi) in ext.items()))
-        self.result.setText("\n".join(lines))
+        self.result.setPlainText("\n".join(lines))
         if self.sent is not None:
             self.stale.setText("" if self.sent == code else "Programm ist VERALTET - erneut übergeben")
         self.front.show_path(path, self.machine); self.top.show_path(path)

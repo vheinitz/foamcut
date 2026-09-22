@@ -97,8 +97,8 @@ def test_wing_mirror_and_fixed_tower(win, app, tmp_path):
     assert wp.path.mirrored and wp.values()["mirror"] == "ja"
     assert wp.path.root[5][1] - wp.path.chord_y == pytest.approx(-(plain_y - plain_cy))
     assert wp._name().endswith("_sp.nc")
-    wp.fixed.setCurrentIndex(0); wp.rebuild(); app.processEvents()
-    assert wp.path.root_tower == 1
+    win.machine_page.fixed.setCurrentIndex(0); app.processEvents()      # the tower lives on the machine page
+    assert wp.path.root_tower == 1                                      # design pages recompute on the change
     assert json.loads((tmp_path / "machine.json").read_text())["wire_fixed_tower"] == 1
     wp.set_values({"mirror": "nein"}); wp.rebuild()
     assert wp.values()["mirror"] == "nein"
@@ -154,7 +154,7 @@ def test_wing_area_locks_the_chord_fields(win, app):
 def test_shape_page_builds_a_ring_and_hands_it_over(win, app):
     sp = win.shape_page
     sp.rebuild(); app.processEvents()
-    assert sp.gcode and sp.path is not None and "Form: A rechteck" in sp.result.text()
+    assert sp.gcode and sp.path is not None and "Form: A rechteck" in sp.result.toPlainText()
     sp.inputs["a_hole"].setCurrentText("kreis"); sp.inputs["b_hole"].setCurrentText("kreis")
     sp.inputs["b_kind"].setCurrentText("ellipse"); sp.rebuild(); app.processEvents()
     assert len(sp.path.root) == 2 * 73 + 1 and sp.values()["b_kind"] == "ellipse"
@@ -170,7 +170,7 @@ def test_contour_page_loads_an_svg_and_hands_over_a_parallel_program(win, app):
     assert cp.model.key == "contour" and hasattr(cp.inputs["svg"], "browse")
     cp.inputs["svg"].setText("config/beispiel.svg"); cp.inputs["width"].setText("80")
     assert cp.rebuild()
-    assert any("3 Teil(e)" in l for l in cp.result.text().splitlines())
+    assert any("3 Teil(e)" in l for l in cp.result.toPlainText().splitlines())
     cp.b_prog.click(); app.processEvents()
     assert win.program_page.name == "beispiel_b80_30.nc" and win.nav.currentRow() == win.program_row
     cp.inputs["svg"].setText("config/gibt-es-nicht.svg")
@@ -182,7 +182,7 @@ def test_slice_page_cuts_one_slab_of_the_example_body(win, app):
     sp = win.slice_page
     sp.inputs["stl"].setText("config/beispiel.stl"); sp.inputs["index"].setText("3")
     assert sp.rebuild()
-    assert any(l.startswith("Scheibe 3 von 5") for l in sp.result.text().splitlines())
+    assert any(l.startswith("Scheibe 3 von 5") for l in sp.result.toPlainText().splitlines())
     sp.b_prog.click(); app.processEvents()
     assert win.program_page.name == "beispiel_scheibe3_40mm.nc"
 
@@ -334,6 +334,18 @@ def test_machine_page_jog_buttons_emit_grbl_commands(win, app):
     btn = next(b for b in pad if b.text() == "X+U+ ▶")
     btn.click()
     assert sent[-1].startswith("$J=G91 G21 X5.000 U5.000 F")
+
+
+def test_tower_gap_lives_on_the_machine_page(win, app, tmp_path):
+    from foamcut.machine import Machine
+    mp = win.machine_page
+    assert mp.gap.text() == "615" and "Verfahrweg X 220" in mp.travel_show.text()
+    mp.gap.setText("600"); mp.gap.editingFinished.emit(); app.processEvents()
+    assert Machine.load(tmp_path / "machine.json").tower_gap_mm == 600.0
+    assert win.wing_page.path.tower_gap == 600.0                        # the wing was recomputed
+    mp.gap.setText("nix"); mp.gap.editingFinished.emit()
+    assert mp.gap.text() == "600"
+    assert "Maschine" not in [win.wing_page.nav.item(i).text() for i in range(win.wing_page.nav.count())]
 
 
 def test_kerf_lives_on_the_machine_page_and_reshapes_the_designs(win, app, tmp_path):
