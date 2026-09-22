@@ -1,0 +1,27 @@
+; foamcut slice - Beispiel: Rumpf aus config/beispiel.stl in 40-mm-Scheiben, verlaufend geschnitten
+
+[koerper]
+stl = config/beispiel.stl
+scale = 1
+axis = z
+up = y
+mirror = nein
+thickness = 40
+index = 2
+loft = ja
+points = 120
+
+[lage]
+root_gap = 150
+block_x = 20
+table_y = 20
+lead = 12
+
+[schnitt]
+margin = 10
+
+[block]
+block_s =
+block_w =
+block_len =
+block_h =

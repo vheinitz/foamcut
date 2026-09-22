@@ -605,6 +605,20 @@ class Model:
         return self.from_text(text)
 
 
+def inverted(contour: list[Point], tower: list[Point]) -> bool:
+    """True when the wire lines have crossed before this tower: the contour
+    there is the point-reflected one (rear and front swapped). A signed area
+    cannot tell - a point reflection keeps the orientation - so compare the
+    rear->front vector of the block face with the tower's."""
+    n = len(contour)
+    if n < 3:
+        return False
+    k = max(range(n), key=lambda i: math.dist(contour[i], contour[0]))
+    ax, ay = contour[k][0] - contour[0][0], contour[k][1] - contour[0][1]
+    bx, by = tower[k][0] - tower[0][0], tower[k][1] - tower[0][1]
+    return ax * bx + ay * by < 0
+
+
 def _w(p1: Point, p2: Point) -> str:
     return f"X{p1[0]:.3f} Y{p1[1]:.3f} U{p2[0]:.3f} V{p2[1]:.3f}"
 

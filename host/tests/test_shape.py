@@ -90,3 +90,13 @@ def test_shape_gcode_is_valid_and_returns_to_the_entry():
     assert not prog.errors and code.startswith("; foamcut shape: A rechteck")
     g1 = [l for l in code.splitlines() if l.startswith("G1 ") and "F" in l and "G94" not in l]
     assert f"X{path.entry_t1[0]:.3f}" in g1[-2]      # last cut segment; g1[-1] is the hot retreat to X0/U0 and sh.shape_name(spec(a_hole="kreis")).endswith("_ring.nc")
+
+
+def test_crossing_wire_lines_are_reported_even_though_orientation_survives():
+    """A big A and a small B: the wire lines cross before tower 1, the contour
+    there is point-reflected (still CCW - a signed area would not notice)."""
+    s = spec(a_kind="kreis", a_w=60.0, b_kind="kreis", b_w=10.0, panel=200.0)
+    p = sh.build_path(s, machine())
+    assert any("kreuzen sich vor Turm 1" in n for n in p.notes)
+    same = sh.build_path(spec(a_kind="kreis", a_w=60.0, b_kind="kreis", b_w=60.0), machine())
+    assert not any("kreuzen" in n for n in same.notes)

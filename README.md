@@ -60,6 +60,7 @@ renamed, which is how this build gets real `U` and `V` words.
 | `config/beispiel.wing` | wing spec template, matches the measured travel |
 | `config/beispiel.shape` | free-shape spec template (fuselage segment, ring) |
 | `config/beispiel.contour`, `beispiel.svg` | SVG outline spec: ring, triangle and an "A" with its hole |
+| `config/beispiel.slices`, `beispiel.stl` | slab spec: a 200 mm fuselage body in 40 mm slices |
 | `docs/` | pinout and bring-up checklist |
 
 ## The `foamcut` tool
@@ -103,6 +104,10 @@ foamcut contour SPEC.contour  outlines of an SVG (letters, silhouettes, sketches
                        Inkscape) cut prismatically, X=U / Y=V: kerf, slits to holes,
                        several pieces routed around each other (GUI page "Kontur";
                        foamcut contour --template)
+foamcut slices SPEC.slices  one slab of an STL body: side A = section at the slab's
+                       start, side B at its end, lofted (smooth stack instead of
+                       steps); or prismatic through the middle. Fuselages, big
+                       wings from foam slices on spars (GUI page "Scheiben")
 foamcut nest LIST.batch     several saved parts stacked in one block, one program
                        (GUI page "Schachteln"; pairs: mirror-image panel nested
                        thin-over-thick; wire travels behind the block face)

@@ -439,6 +439,12 @@ def cmd_contour(args) -> int:
     return _cmd_design(args, CONTOUR_MODEL, "contour")
 
 
+def cmd_slices(args) -> int:
+    """Generate the program for one slab of an STL body from a .slices spec."""
+    from .slices import SLICE_MODEL
+    return _cmd_design(args, SLICE_MODEL, "slices")
+
+
 def cmd_nest(args) -> int:
     """Several parts in one block from a .batch list -> one program."""
     from . import nest as ns
@@ -788,6 +794,13 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--airfoils", default="airfoil", help=argparse.SUPPRESS)
     c.add_argument("--template", action="store_true", help="print a spec template")
     c.set_defaults(func=cmd_contour)
+
+    c = sub.add_parser("slices", help="one slab of an STL body (lofted between its two sections) -> G-code")
+    c.add_argument("spec", nargs="?", help=".slices text file (foamcut slices --template)")
+    c.add_argument("-o", "--out")
+    c.add_argument("--airfoils", default="airfoil", help=argparse.SUPPRESS)
+    c.add_argument("--template", action="store_true", help="print a spec template")
+    c.set_defaults(func=cmd_slices)
 
     c = sub.add_parser("nest", help="several saved parts stacked in one block -> one program")
     c.add_argument("batch", nargs="?", help=".batch list (foamcut nest --template)")
