@@ -103,6 +103,44 @@ mit viel Power.“ Die Einschätzung oben („langsam+heiß = verglaste Haut“)
 gilt für diesen Schaum/Draht also nicht; die Idee „langsam für glatt“ ist
 damit vom Tisch. Was bleibt: Haltestege für Formen mit Loch.
 
+## Freie 2D-Konturen und Scheiben aus STL
+Idee vom 2026-09-23 (Valentin): „beliebige 2D-Formen ausschneiden: Buchstaben,
+Freihandformen, Silhouetten, Skizzen … Achsen wie Gantry, Dicke egal … Eigener
+Editor oder fertigen nutzen und als G-Code/Vektorgrafik importieren?“ Dazu
+„3D-Form in Scheiben definierter Dicke schneiden und beliebige n-te schneiden
+… riesige Flügel oder Rümpfe aus Styroporscheiben, Holzleisten, Bespannfolie
+… Form als STL importierbar, hier definierbar wie dick die Scheibe und welche
+gerade geschnitten werden muss.“
+
+Einschätzung (Claude, 2026-09-23):
+- Kein eigener Editor. Inkscape kann Text→Pfad, Bitmap nachzeichnen
+  (Silhouetten, Skizzen), Freihand, Boolesche Operationen — das sind Jahre.
+  Schnittstelle ist **SVG**, nicht G-Code: Laser-/Fräs-Postprozessoren heben
+  zwischen Konturen ab (Laser aus, Eilgang) — ein Draht kann nicht abheben.
+  Das Drahtspezifische bleibt bei foamcut: Kerf, Ein-/Auslauf von der
+  Blockrückseite, Schlitz zu Innenkonturen (A, B, O), Reihenfolge, kein
+  Eintauchen. Das Ring-Modell (shape.py) macht genau das schon für ein Loch.
+- Neues Modell `.contour`: SVG-Datei + Maßstab + Lage im Block + Einlaufseite
+  + Spiegeln; Pfade (Linien, Béziers) auf Polylinien plätten, Kerf-Offset,
+  Lage prüfen gegen Verfahrweg (X ≤ 218, Y ≤ 130). Beide Seiten gleich
+  (X=U, Y=V) — das ist ein Parallelschnitt (prismatisch), kein „Gantry“;
+  Gantry bezeichnet die Bauform, nicht die Betriebsart. Aufwand ~1–2 Sitzungen,
+  kleiner SVG-Parser reicht (kein svgpathtools nötig).
+- STL-Scheiben: trimesh schneidet ein Netz mit Ebenen z = k·t und liefert die
+  Konturen je Schnitt. Zwei Wege: (a) 3-Achs-Denke: Scheibe k = Kontur bei
+  z_k, prismatisch → Treppen. (b) **Unser Vorteil**: Scheibe k als Loft
+  zwischen Kontur z_k (Turm 1) und z_{k+1} (Turm 2) — wie das Formen-Modell
+  mit Seiten A/B (`by_angle` für die Punktzuordnung) → glatte Regelfläche
+  statt Treppen, ein Rumpf aus 40-mm-Scheiben sieht rund aus. Block = Scheibe,
+  Konturen ≤ 218 × 130 mm je Seite; Rumpfquerschnitte passen, Flügel weiter
+  mit dem Flügelmodell (das ist schon der Loft). Holmleisten brauchen Nuten
+  vom Rand aus (Draht kann kein Loch ohne Schlitz), Position in allen Scheiben
+  gleich, plus Nummerierung im G-Code-Kopf. Abhängigkeit trimesh + numpy.
+  Aufwand ~2–3 Sitzungen nach dem SVG-Import, weil er dessen Kontur-Pipeline
+  wiederverwendet.
+- Reihenfolge: erst SVG-Kontur (prismatisch, sofort nützlich), dann
+  STL-Scheiben mit Loft.
+
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.
 - Winde mit Drehzahlregelung für reproduzierbare Rampenstarts.
