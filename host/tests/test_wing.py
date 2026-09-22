@@ -508,3 +508,15 @@ def test_cli_machine_set_tower_gap(tmp_path, capsys):
     m = Machine.load(mp)
     assert m.tower_gap_mm == 642.0 and m.tower_gap_measured
     assert main(["--machine", str(mp), "machine", "set", "--tower-gap", "0"]) == 2
+
+
+def test_every_program_carries_a_machine_readable_job_line():
+    """Line 2: block, placement, root tower, time, travel - for a controller
+    that holds the file without foamcut (ESP32 program page)."""
+    code, path = generate(spec(), machine(kerf=0.0), AIRFOILS)
+    line = code.splitlines()[1]
+    assert line.startswith("; foamcut-job block=")
+    kv = dict(tok.split("=", 1) for tok in line[len("; foamcut-job "):].split())
+    mb = path.min_block
+    assert kv["block"] == f"{mb[2]:.0f}x{mb[3]:.0f}x{mb[5]:.0f}" and kv["x"] == "20" and kv["root"] == "T2"
+    assert kv["time"].endswith("min") and kv["travel"].startswith("X0..")

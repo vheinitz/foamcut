@@ -165,3 +165,34 @@ def test_serial_link_hands_the_boot_banner_to_connect():
     hw = Hwtest(Fake())
     assert hw.connect()
     assert hw.is_hwtest()
+
+
+def test_tcp_link_talks_lines_over_a_socket():
+    """tcp://host:port (ESP3D bridge) behaves like the serial link."""
+    import socket, threading
+    from foamcut.link import LinkError, TcpLink, open_link
+    srv = socket.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(1)
+    port = srv.getsockname()[1]
+    got = []
+
+    def serve():
+        conn, _ = srv.accept()
+        data = b""
+        while b"\n" not in data:
+            data += conn.recv(64)
+        got.append(data)
+        conn.sendall(b"ok\r\n<Idle|MPos:0,0,0,0>\n")
+        conn.close()
+    t = threading.Thread(target=serve, daemon=True); t.start()
+    link = open_link(f"tcp://127.0.0.1:{port}")
+    assert isinstance(link, TcpLink)
+    link.write_line("$$")
+    assert link.read_line(timeout=2.0) == "ok"
+    assert link.read_line(timeout=2.0).startswith("<Idle")
+    t.join(2.0)
+    assert got == [b"$$\n"]
+    with pytest.raises(LinkError):
+        link.read_line(timeout=1.0)           # server closed
+    link.close()
+    with pytest.raises(LinkError, match="cannot connect"):
+        TcpLink("tcp://127.0.0.1:1", connect_timeout=0.5)
