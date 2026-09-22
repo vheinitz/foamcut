@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from foamcut.cli import main
 
 
@@ -56,3 +58,16 @@ def test_check_without_travel_measured_does_not_block(tmp_path):
     nc = tmp_path / "ok.nc"
     nc.write_text("G21\nG90\nG1 F300\nG1 X60\n")
     assert main(["--machine", str(mpath), "check", str(nc)]) == 0
+
+
+def test_machine_set_steps_per_mm_and_clamps_the_rate(tmp_path, capsys):
+    from foamcut.machine import Machine
+    mpath = tmp_path / "machine.json"
+    Machine().save(mpath)
+    assert main(["--machine", str(mpath), "machine", "set", "--steps", "Y=17408", "--steps", "V=17408"]) == 0
+    m = Machine.load(mpath)
+    assert m.steps_per_mm["Y"] == m.steps_per_mm["V"] == 17408.0
+    assert m.max_rate["Y"] == pytest.approx(68.9, abs=0.1)          # 20 kHz budget
+    out = capsys.readouterr().out
+    assert "Y 17408" in out
+    assert main(["--machine", str(mpath), "machine", "set", "--steps", "Q=1"]) == 2
