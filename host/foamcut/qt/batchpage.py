@@ -73,7 +73,7 @@ class BatchPage(QWidget):
 
     def add_files(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Teile laden", self.state.get("last_dir", "gcode"),
-                                                "Teile (*.wing *.shape);;alle (*)")
+                                                "Teile (*.wing *.shape *.contour);;alle (*)")
         for f in files:
             self._add_item(f); self.state.set("last_dir", str(Path(f).parent))
         self.schedule()
@@ -124,7 +124,7 @@ class BatchPage(QWidget):
         except ValueError:
             self._message("Keine Zahl in den Blockfeldern", ERR_STYLE); self.nest = None; self.gcode = ""; return False
         if not batch.items:
-            self.result.setText("Teile laden (.wing / .shape), dann werden sie hier gestapelt."); self.nest = None; self.gcode = ""
+            self.result.setText("Teile laden (.wing / .shape / .contour), dann werden sie hier gestapelt."); self.nest = None; self.gcode = ""
             self.front.show_path(None, self.machine); self.top.show_path(None); return False
         try:
             code, nest = generate(batch, self.machine, self.airfoil_dir)

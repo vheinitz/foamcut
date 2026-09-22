@@ -59,6 +59,7 @@ renamed, which is how this build gets real `U` and `V` words.
 | `airfoil/` | 295 airfoil `.dat` files (UIUC database via swarfer.co.za) |
 | `config/beispiel.wing` | wing spec template, matches the measured travel |
 | `config/beispiel.shape` | free-shape spec template (fuselage segment, ring) |
+| `config/beispiel.contour`, `beispiel.svg` | SVG outline spec: ring, triangle and an "A" with its hole |
 | `docs/` | pinout and bring-up checklist |
 
 ## The `foamcut` tool
@@ -98,6 +99,10 @@ foamcut shape SPEC.shape    free shape in one pass: rounded rectangle / triangle
                        circle / ellipse on each side, disc or ring (slit at the
                        rear), same placement as wings (GUI page "Formen";
                        foamcut shape --template)
+foamcut contour SPEC.contour  outlines of an SVG (letters, silhouettes, sketches from
+                       Inkscape) cut prismatically, X=U / Y=V: kerf, slits to holes,
+                       several pieces routed around each other (GUI page "Kontur";
+                       foamcut contour --template)
 foamcut nest LIST.batch     several saved parts stacked in one block, one program
                        (GUI page "Schachteln"; pairs: mirror-image panel nested
                        thin-over-thick; wire travels behind the block face)

@@ -70,6 +70,12 @@ class DesignPage(QWidget):
                     w = QComboBox(); w.addItems(kind.split(":", 1)[1].split("|"))
                     w.setCurrentText(value)
                     w.currentTextChanged.connect(self.schedule)
+                elif kind.startswith("file:"):
+                    w = QLineEdit(str(value)); w.setMinimumWidth(160)
+                    w.textChanged.connect(self.schedule)
+                    w.browse = QPushButton("…"); w.browse.setMaximumWidth(28)
+                    w.browse.clicked.connect(lambda _, w=w, ext=kind.split(":", 1)[1], label=label:
+                                             self._pick_file(w, ext, label))
                 elif kind == "bool":
                     w = QWidget(); h = QHBoxLayout(w); h.setContentsMargins(0, 0, 0, 0)
                     w.nein = QRadioButton("nein"); w.ja = QRadioButton("ja")
@@ -83,6 +89,8 @@ class DesignPage(QWidget):
                 self.inputs[key] = w
                 row = QWidget(); rl = QHBoxLayout(row); rl.setContentsMargins(0, 0, 0, 0)
                 rl.addWidget(w)
+                if hasattr(w, "browse"):
+                    rl.addWidget(w.browse)
                 if unit:
                     rl.addWidget(QLabel(unit))
                 rl.addStretch()
@@ -179,6 +187,12 @@ class DesignPage(QWidget):
         self.log(f"Block gesetzt: {bl:.0f} x {bh:.0f} x {width:.0f} mm, Rueckseite X={bx:g}, Unterkante Y={by:.1f}")
 
     # ---- values ---------------------------------------------------------
+    def _pick_file(self, w, ext: str, label: str):
+        p, _ = QFileDialog.getOpenFileName(self, label, self.state.get("last_dir", "gcode"),
+                                           f"{ext.upper()} (*.{ext});;alle (*)")
+        if p:
+            w.setText(p); self.state.set("last_dir", str(Path(p).parent))
+
     def values(self) -> dict[str, str]:
         out = {}
         for key, w in self.inputs.items():
@@ -272,14 +286,16 @@ class DesignPage(QWidget):
         prog = gc.Program.parse(code)
         problems = self.machine.check_extents(path.extents()) if self.machine.has_travel() else []
         for n in path.notes:
-            if n.startswith(("TURMABSTAND", "Tisch zu")) or "kreuzen" in n or "ragt" in n or "ausserhalb" in n:
+            if (n.startswith(("TURMABSTAND", "Tisch zu", "Text nicht")) or "kreuzen" in n or "ragt" in n
+                    or "ausserhalb" in n):
                 self._message(n, WARN_STYLE)
         for pr in problems:
             self._message(f"Verfahrweg: {pr}", ERR_STYLE)
         for e in prog.errors:
             self._message(f"G-Code: {e}", ERR_STYLE)
         ext = path.extents()
-        lines = [n for n in path.notes if n.startswith(("Wurzel an", "Form:", "Mindestblock", "Tisch:", "Block bei", "V-Form", "Schnittzeit"))]
+        lines = [n for n in path.notes if n.startswith(("Wurzel an", "Form:", "Kontur:", "Scheibe", "Mindestblock", "Tisch:",
+                                                        "Block bei", "V-Form", "Schnittzeit")) or " Teil(e)" in n]
         t_lo, t_hi = path.table_range
         s_lo, s_hi, x_lo, _ = path.table_max
         self.table_hint.setText(

@@ -66,12 +66,15 @@ Tastatur im Jog: `a/d` X, `s/w` Y, `j/l` U, `k/i` V, `1`..`4` Schrittweite
 Heizdraht), **Flügel** (Schritte links, Zeichnung rechts live, Warnungen
 inline, letzte Werte gemerkt; Schritt *Block* nennt Mindestblock und
 Tischhöhe/-ausdehnung), **Formen** (freie Querschnitte je Seite, Scheibe
-oder Ring – Rumpfsegmente), **Programm & Sim** (laden/umsetzen,
+oder Ring – Rumpfsegmente), **Kontur** (SVG-Zeichnung aus Inkscape als
+Parallelschnitt X=U/Y=V: Buchstaben, Silhouetten; Löcher über einen Schlitz
+nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
+**Programm & Sim** (laden/umsetzen,
 Turtle-Simulation beider Schlittenwege, Start/Pause/Stop). Beim Verbinden
 gleicht die GUI alle grbl-Settings mit `config/` ab.
 
 **Schachteln (mehrere Teile in einem Block):** Seite „Schachteln“ oder
-`foamcut nest LISTE.batch`. Gespeicherte `.wing`/`.shape` in die Liste laden,
+`foamcut nest LISTE.batch`. Gespeicherte `.wing`/`.shape`/`.contour` in die Liste laden,
 Reihenfolge = Schnittreihenfolge von oben nach unten (das letzte Teil liegt
 auf dem Tisch). Die Teile werden in Y gestapelt, Abstand „gap“ dazwischen –
 geprüft über die ganze Blockbreite, weil der Draht bei kürzeren Teilen hinter
