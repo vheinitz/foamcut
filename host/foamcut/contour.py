@@ -382,15 +382,150 @@ def route_parts(parts: list[Part], entry: Point | float, kerf: float = 0.0,
     return pa, pb, order, entry
 
 
+class ChainError(WingError):
+    """The chain scheme does not work for this arrangement; route piece by piece."""
+
+
+def _centre(pts: list[Point]) -> Point:
+    xs = [q[0] for q in pts]; ys = [q[1] for q in pts]
+    return ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+
+
+def _junction(part: Part, target: Point) -> tuple[int, float]:
+    """Where the line from the piece's centre towards `target` leaves its
+    outer loop: (walk edge index, position along that edge). The cut is
+    split there, so the wire can leave for the neighbour and come back."""
+    c = _centre(part.hull)
+    n = len(part.a) - 1                       # closed walk: a[0] == a[-1]
+    outer = set(part.outer)
+    best = None
+    for j in range(n):
+        if j not in outer or (j + 1) % n not in outer:
+            continue                          # edge interrupted by a slit to a hole
+        t = geom.seg_intersect(c, target, part.a[j], part.a[j + 1])
+        if t is not None and (best is None or t > best[0]):
+            best = (t, j)
+    if best is None:
+        raise ChainError("kein Uebergangspunkt auf der Kontur gefunden")
+    t, j = best
+    pt = (c[0] + (target[0] - c[0]) * t, c[1] + (target[1] - c[1]) * t)
+    a, b = part.a[j], part.a[j + 1]
+    d = math.dist(a, b)
+    return j, (math.dist(a, pt) / d if d else 0.0)
+
+
+def _split(part: Part, cuts: list[tuple[int, float]]) -> tuple[Part, list[int]]:
+    """Insert points into the walk (both sides, same index - the loft pairing
+    must survive) and return the part plus the new indices."""
+    order = sorted(range(len(cuts)), key=lambda i: (cuts[i][0], cuts[i][1]))
+    a, b = list(part.a), list(part.b)
+    outer = list(part.outer)
+    idx = [0] * len(cuts)
+    for shift, i in enumerate(order):
+        j, f = cuts[i]
+        at = j + 1 + shift
+        mix = lambda pts: (pts[at - 1][0] + (pts[at][0] - pts[at - 1][0]) * f,
+                           pts[at - 1][1] + (pts[at][1] - pts[at - 1][1]) * f)
+        a.insert(at, mix(a)); b.insert(at, mix(b))
+        outer = [k + 1 if k >= at else k for k in outer] + [at]
+        idx[i] = at
+    return Part(a, b, part.hull, part.label, sorted(outer)), idx
+
+
+def _arc(walk: list[Point], i: int, j: int) -> list[Point]:
+    """The stretch of the closed walk from index i forward to index j."""
+    n = len(walk) - 1
+    if i == j:
+        return [walk[i]]
+    return walk[i:j + 1] if i < j else walk[i:n] + walk[0:j + 1]
+
+
+def chain_cut(parts: list[Part], entry_x: float, kerf: float = 0.0,
+              order: list[int] | None = None) -> tuple[list[Point], list[Point], list[int], Point]:
+    """Cut the pieces as one chain with a single lead-in.
+
+    Out: the wire enters the first piece, cuts one arc of it, crosses the
+    waste strip to the next piece along the line joining their centres, cuts
+    one arc there, and so on. At the last piece it closes the loop and turns
+    around; on the way back it cuts the other arc of every piece, retracing
+    the connecting channels it has already melted. One lead-in, no travel
+    through untouched foam, and every piece comes free on the way back - the
+    last one first, so the wire always moves away from a piece that drops
+    (the chain runs top to bottom).
+    """
+    if not parts:
+        raise ChainError("keine Teile")
+    order = order or cut_order(parts, (entry_x, max(q[1] for p in parts for q in p.hull)))
+    seq = [parts[k] for k in order]
+    centres = [_centre(p.hull) for p in seq]
+    entry = (entry_x, centres[0][1])
+    # junctions: towards the entry / the previous piece, and towards the next
+    cuts = [[_junction(seq[0], entry)] if len(seq) else []]
+    for i in range(1, len(seq)):
+        cuts[i - 1].append(_junction(seq[i - 1], centres[i]))
+        cuts.append([_junction(seq[i], centres[i - 1])])
+    split, idx = [], []
+    for part, cl in zip(seq, cuts):
+        sp, ii = _split(part, cl)
+        split.append(sp); idx.append(ii)
+    # every hop must stay in the waste: it may touch the two pieces it joins
+    for i in range(len(seq)):
+        frm = split[i].a[idx[i][0]] if i == 0 else split[i - 1].a[idx[i - 1][1]]
+        to = split[i].a[idx[i][0]]
+        if i == 0:
+            frm = entry
+        for j, other in enumerate(split):
+            if j in (i, i - 1):
+                continue
+            if geom._strict_cross(frm, to, other.a[:-1]) or geom.inside(((frm[0] + to[0]) / 2, (frm[1] + to[1]) / 2),
+                                                                        other.a[:-1]):
+                raise ChainError("Uebergang wuerde ein anderes Teil treffen")
+    pa: list[Point] = [entry]; pb: list[Point] = [entry]
+    # out: one arc per piece, hopping to the next
+    for i, part in enumerate(split):
+        j_in = idx[i][0]
+        if i < len(split) - 1:
+            j_out = idx[i][1]
+            pa.extend(_arc(part.a, j_in, j_out)); pb.extend(_arc(part.b, j_in, j_out))
+            nxt = split[i + 1]
+            pa.append(nxt.a[idx[i + 1][0]]); pb.append(nxt.b[idx[i + 1][0]])
+        else:                                   # last piece: close its loop, then turn around
+            wa, wb = part.walks_from(j_in)
+            pa.extend(wa); pb.extend(wb)
+    # back: the other arc of every piece, retracing the channels between them
+    for i in range(len(split) - 2, -1, -1):
+        part = split[i]
+        j_in, j_out = idx[i][0], idx[i][1]
+        pa.append(part.a[j_out]); pb.append(part.b[j_out])
+        pa.extend(_arc(part.a, j_out, j_in)[1:]); pb.extend(_arc(part.b, j_out, j_in)[1:])
+    pa.append(entry); pb.append(entry)
+    keep = [0] + [i for i in range(1, len(pa)) if math.dist(pa[i], pa[i - 1]) > 1e-9 or math.dist(pb[i], pb[i - 1]) > 1e-9]
+    return [pa[i] for i in keep], [pb[i] for i in keep], order, entry
+
+
+def cut_parts(parts: list[Part], entry_x: float, kerf: float = 0.0,
+              tab: float = 0.0) -> tuple[list[Point], list[Point], list[int], Point, str]:
+    """The wire path over all pieces: the chain (one lead-in, every piece cut
+    in two arcs, the channels between them reused on the way back) where it
+    works, otherwise piece by piece from behind. Also returns which it was."""
+    if tab <= 0:
+        try:
+            pa, pb, order, entry = chain_cut(parts, entry_x, kerf)
+            return pa, pb, order, entry, "Kette"
+        except (ChainError, ValueError):
+            pass
+    pa, pb, order, entry = route_parts(parts, entry_x, kerf)
+    return [entry] + pa, [entry] + pb, order, entry, "einzeln"
+
+
 def plan(loops: list[list[Point]], kerf: float, entry_x: float, tab: float = 0.0) -> tuple[list[Point], list[str]]:
-    """All outlines as one path from the entry point (entry_x, y of the
-    rearmost outline) and back to it, in the drawing's coordinates."""
+    """All outlines as one path from the entry point and back to it, in the
+    drawing's coordinates."""
     outlines = classify(loops, kerf)
     parts = [part_from_outline(o, tab, kerf=kerf) for o in outlines]
-    path, _, order, entry = route_parts(parts, entry_x, kerf)
-    path = [entry] + path
+    path, _, order, entry, how = cut_parts(parts, entry_x, kerf, tab)
     notes = [f"{len(outlines)} Teil(e), {sum(len(o.holes) for o in outlines)} Loch/Loecher, "
-             f"Reihenfolge von hinten: " + ", ".join(str(k + 1) for k in order)
+             f"Schnittreihenfolge ({how}): " + ", ".join(str(k + 1) for k in order)
              + (f"; Haltesteg {tab:g} mm an jeder Kontur (von Hand brechen)" if tab > 0 else "")]
     return path, notes
 

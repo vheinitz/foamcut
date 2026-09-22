@@ -204,7 +204,7 @@ def test_object_tab_shows_the_source_drawing_or_body(win, app):
 
 def test_board_programs_are_queued_and_loaded_only_on_confirmation(win, app):
     sp, pp = win.slice_page, win.program_page
-    sp.inputs["stl"].setText("config/beispiel.stl"); sp.inputs["index"].setText("2,3,4"); sp.inputs["block_len"].setText("160")
+    sp.inputs["stl"].setText("config/beispiel.stl"); sp.inputs["index"].setText("2,3,4"); sp.inputs["block_len"].setText("140")
     sp.inputs["loft"].nein.setChecked(True)
     assert sp.rebuild() and len(sp.path.programs) == 2
     sp.b_prog.click(); app.processEvents()

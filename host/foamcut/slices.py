@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import geom
-from .contour import Part, classify, clearance, part_from_outline, route_parts
+from .contour import Part, classify, clearance, cut_parts, part_from_outline
 from .machine import Machine
 from .wing import (Model, WingError, WingPath, _template, contour_moves, emit_gcode, from_text, inverted, loft,
                    to_text)
@@ -526,7 +526,7 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
 def pack_gap(spec: SliceSpec, machine: Machine) -> float:
     """Foam left between two pieces: two kerfs (so the wire can still travel
     between them at one kerf from each) plus a little, or more if asked."""
-    return max(spec.gap, 2 * clearance(machine.kerf_mm) + 0.5)
+    return max(spec.gap, clearance(machine.kerf_mm) + 0.5)
 
 
 def _sagitta(pa: list[Point], pb: list[Point], mid_loops: list[list[Point]]) -> float | None:
@@ -539,16 +539,9 @@ def _sagitta(pa: list[Point], pb: list[Point], mid_loops: list[list[Point]]) -> 
     big = max(mid_loops, key=lambda l: abs(geom.signed_area(l)))
     worst = 0.0
     for q in big[::max(1, len(big) // 60)]:
-        d = min(_seg_dist(q, chord[i], chord[i + 1]) for i in range(n - 1))
+        d = min(geom.seg_dist(q, chord[i], chord[i + 1]) for i in range(n - 1))
         worst = max(worst, d)
     return worst
-
-
-def _seg_dist(p: Point, a: Point, b: Point) -> float:
-    ax, ay = b[0] - a[0], b[1] - a[1]
-    l2 = ax * ax + ay * ay
-    t = 0.0 if l2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * ax + (p[1] - a[1]) * ay) / l2))
-    return math.dist(p, (a[0] + ax * t, a[1] + ay * t))
 
 
 def _usable(spec: SliceSpec, machine: Machine) -> tuple[float, float]:
@@ -717,16 +710,16 @@ def build_boards(spec: SliceSpec, machine: Machine) -> tuple[list[Board], list[s
             parts.extend(Part([(x + x0, y) for x, y in p.a], [(x + x0, y) for x, y in p.b],
                               geom.convex_hull([(x + x0, y) for x, y in p.a + p.b]), p.label, list(p.outer))
                          for p in pl.parts)
-        pa, pb, order, entry = route_parts(parts, spec.block_x, machine.kerf_mm)
+        pa, pb, order, entry, how = cut_parts(parts, spec.block_x, machine.kerf_mm, spec.tab)
         y0 = entry[1]
-        pa = [(x, y - y0) for x, y in [entry] + pa]; pb = [(x, y - y0) for x, y in [entry] + pb]
+        pa = [(x, y - y0) for x, y in pa]; pb = [(x, y - y0) for x, y in pb]
         path = loft(spec, pa, pb, machine)
         used_w = max(pl.bbox[2] for pl in placed)
         used_h = max(pl.bbox[3] for pl in placed)
         nums = sorted(pl.slab.index for pl in placed)
         boards.append(Board(b, path, nums, (used_w, used_h), entry[1]))
         turned = [f"{pl.slab.index} um {pl.deg}°" for pl in placed if pl.deg]
-        notes.append(f"Platte {b}: Scheiben {', '.join(map(str, nums))} in Schnittreihenfolge "
+        notes.append(f"Platte {b}: Scheiben {', '.join(map(str, nums))}, Schnittreihenfolge ({how}) "
                      f"{', '.join(parts[k].label.split()[-1] for k in order)}; belegt {used_w:.0f} x {used_h:.0f} mm "
                      f"von {w:.0f} x {h:.0f} nutzbar" + (f"; gedreht: {', '.join(turned)}" if turned else ""))
     for s in slabs:

@@ -41,6 +41,14 @@ def inside(p: Point, loop: list[Point]) -> bool:
     return hit
 
 
+def seg_dist(p: Point, a: Point, b: Point) -> float:
+    """Distance from p to the segment a-b."""
+    ax, ay = b[0] - a[0], b[1] - a[1]
+    l2 = ax * ax + ay * ay
+    t = 0.0 if l2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * ax + (p[1] - a[1]) * ay) / l2))
+    return math.dist(p, (a[0] + ax * t, a[1] + ay * t))
+
+
 def seg_intersect(a: Point, b: Point, c: Point, d: Point) -> float | None:
     """Parameter t along a->b where it crosses c->d, None if it does not."""
     r = (b[0] - a[0], b[1] - a[1]); s = (d[0] - c[0], d[1] - c[1])
