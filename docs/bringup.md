@@ -67,7 +67,8 @@ Heizdraht und Schnittwerte; hier stehen auch Turmabstand und der Turm mit
 dem festen Draht – sie gelten für alle Entwürfe), **Flügel** (Schritte links, Zeichnung rechts live, Warnungen
 inline, letzte Werte gemerkt; Schritt *Block* nennt Mindestblock und
 Tischhöhe/-ausdehnung; Schritt *Holme* hat sechs Zeilen für Nuten und
-Löcher, je eine Leiste, leere bleiben unbeachtet: „30% oben 6x4“. Lage in %
+Löcher, je eine Leiste, jede mit einem Häkchen ein- und ausschaltbar (der Wert
+bleibt stehen; in der Datei steht dann „aus“ davor): „30% oben 6x4“. Lage in %
 wächst mit der Zuspitzung mit; die Nut steht senkrecht auf der Haut an dieser
 Stelle, nicht senkrecht im Raum, damit die Leiste flach darin liegt. „STL speichern…“ gibt den Flügel als
 Körper aus, mit Nuten und Löchern: daraus lassen sich später auf der Seite

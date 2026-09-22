@@ -221,6 +221,20 @@ def test_board_programs_are_queued_and_loaded_only_on_confirmation(win, app):
     assert not pp.queue
 
 
+def test_spar_checkbox_keeps_the_value_when_it_is_switched_off(win, app):
+    wp = win.wing_page
+    w = wp.inputs["holm1"]
+    w.edit.setText("30% oben 6x4"); w.on.setChecked(True); wp.rebuild(); app.processEvents()
+    assert any("Holmnuten" in n for n in wp.path.notes)
+    w.on.setChecked(False); wp.rebuild(); app.processEvents()
+    assert not any("Holmnuten" in n for n in wp.path.notes)
+    assert w.edit.text() == "30% oben 6x4" and wp.values()["holm1"] == "aus 30% oben 6x4"
+    wp.set_values({"holm1": "aus 30% oben 6x4"})               # survives save and load
+    assert w.edit.text() == "30% oben 6x4" and not w.on.isChecked()
+    w.on.setChecked(True); wp.rebuild(); app.processEvents()
+    assert any("Holmnuten" in n for n in wp.path.notes)
+
+
 def test_freischnitt_runs_as_a_relative_program_from_the_current_position(win, app, monkeypatch):
     from foamcut import gcode as gc
     from foamcut.jog import straight_cut

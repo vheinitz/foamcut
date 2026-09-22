@@ -428,7 +428,7 @@ def test_every_field_has_a_label_unit_and_help():
     for _, _, fields in FIELDS:
         for key, label, unit, default, help_, kind in fields:
             assert label and help_, key
-            assert kind in ("num", "int", "airfoil", "bool", "text") or kind.startswith(("choice:", "file:")), key
+            assert kind in ("num", "int", "airfoil", "bool", "text", "opttext") or kind.startswith(("choice:", "file:")), key
             assert hasattr(WingSpec(), key), key
 
 
@@ -613,3 +613,13 @@ def test_stl_is_a_watertight_body_with_the_spar_slots():
         assert abs(geom.signed_area(hole)) == pytest.approx(20.0, abs=0.1)     # 5 x 4 mm
         outer = max(loops, key=lambda l: abs(geom.signed_area(l)))
         assert max(q[0] for q in outer) - min(q[0] for q in outer) == pytest.approx(chord, abs=0.2)
+
+
+def test_a_spar_can_be_switched_off_without_losing_its_value():
+    from foamcut.wing import spar_list
+    s = spec(holm1="30% oben 6x4", holm2="aus 60% oben 5x4")
+    assert [sp.dist for sp in spar_list(s)] == [30.0]          # only the active one is cut
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
+    assert next(n for n in p.notes if n.startswith("Holmnuten")).count("%") == 1
+    s.holm2 = "60% oben 5x4"
+    assert [sp.dist for sp in spar_list(s)] == [30.0, 60.0]    # the value was still there

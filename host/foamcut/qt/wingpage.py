@@ -82,6 +82,15 @@ class DesignPage(QWidget):
                     (w.ja if value == "ja" else w.nein).setChecked(True)
                     h.addWidget(w.nein); h.addWidget(w.ja); h.addStretch()
                     w.ja.toggled.connect(self.schedule)
+                elif kind == "opttext":
+                    # a value that can be switched off without losing it
+                    w = QWidget(); h = QHBoxLayout(w); h.setContentsMargins(0, 0, 0, 0); h.setSpacing(4)
+                    w.on = QCheckBox(); w.edit = QLineEdit(str(value).removeprefix("aus").strip())
+                    w.on.setChecked(bool(value) and not str(value).strip().lower().startswith("aus"))
+                    w.edit.setMinimumWidth(120)
+                    w.edit.setToolTip("Eingabe mit Enter bestaetigen")
+                    h.addWidget(w.on); h.addWidget(w.edit)
+                    w.on.toggled.connect(self.schedule); w.edit.editingFinished.connect(self.schedule)
                 elif kind == "text":
                     # free text such as a list of slices: recompute on Enter / leaving the
                     # field, not on every keystroke (each one would repack the board)
@@ -210,6 +219,9 @@ class DesignPage(QWidget):
         for key, w in self.inputs.items():
             if isinstance(w, QComboBox):
                 out[key] = w.currentText().strip()
+            elif hasattr(w, "on"):
+                text = w.edit.text().strip()
+                out[key] = text if (w.on.isChecked() or not text) else f"aus {text}"
             elif hasattr(w, "ja"):
                 out[key] = "ja" if w.ja.isChecked() else "nein"
             else:
@@ -224,6 +236,9 @@ class DesignPage(QWidget):
             w.blockSignals(True)
             if isinstance(w, QComboBox):
                 w.setCurrentText(v)
+            elif hasattr(w, "on"):
+                w.edit.setText(str(v).removeprefix("aus").strip())
+                w.on.setChecked(bool(v) and not str(v).strip().lower().startswith("aus"))
             elif hasattr(w, "ja"):
                 (w.ja if v == "ja" else w.nein).setChecked(True)
             else:
