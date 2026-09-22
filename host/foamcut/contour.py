@@ -26,14 +26,15 @@ from .svg import SvgError, load_svg
 from .wing import (Model, WingError, WingPath, _template, emit_gcode, field_catalogue, from_text, loft, to_text)
 
 Point = tuple[float, float]
-CLEARANCE = 1.5         # mm between the travel channel and a cut piece's channel
+CLEARANCE = 1.0         # mm, least distance between the travel path and a piece's cut path
 
 
 def clearance(kerf: float) -> float:
-    """Distance the travel path keeps from a piece's cut path: twice the kerf
+    """Distance the travel path keeps from a piece's cut path: one kerf, so
+    two pieces packed two kerfs apart still let the wire pass between them
     (Valentin, 2026-09-23: "Draht darf an geschnittenen Teilen schon nah
-    fahren - 2x Schnittbreite"), never under 1.5 mm."""
-    return max(2 * kerf, CLEARANCE)
+    fahren - 2x Schnittbreite")."""
+    return max(kerf, CLEARANCE)
 
 FIELDS = [
     ("zeichnung", "Zeichnung", [
@@ -255,48 +256,57 @@ def _cut_outline(o: Outline, tab: float = 0.0) -> list[Point]:
 class Part:
     """One piece to cut: its wire path on side A and B (same length, both
     starting and ending at the piece's rearmost point), and the convex hull
-    the wire must travel around once the piece is cut."""
+    of its cut paths (no clearance - packing and routing add their own)."""
     a: list[Point]
     b: list[Point]
     hull: list[Point]
     label: str = ""
 
-    @property
-    def port(self) -> Point:
-        """Where the wire waits before entering / after leaving: the rearmost
-        vertex of the piece's own hull, so travel legs start and end on hull
-        boundaries and never inside another hull (the packing keeps hulls apart)."""
-        return min(self.hull, key=lambda q: (q[0], abs(q[1] - self.a[0][1])))
-
 
 def part_from_outline(o: Outline, tab: float = 0.0, label: str = "", kerf: float = 0.0) -> Part:
     path = _cut_outline(o, tab)
-    return Part(path, list(path), geom.grow(geom.convex_hull(o.loop), clearance(kerf)), label)
+    return Part(path, list(path), geom.convex_hull(o.loop), label)
 
 
-def route_parts(parts: list[Part], entry: Point) -> tuple[list[Point], list[Point], list[int]]:
+def _port(own: list[Point], rear: Point, others: list[list[Point]]) -> Point:
+    """Where the wire waits before entering / after leaving a piece: the
+    rearmost vertex of its clearance hull that no other piece's hull covers
+    (tightly packed neighbours cover the rear corners; then a side one)."""
+    for q in sorted(own, key=lambda q: (q[0], abs(q[1] - rear[1]))):
+        if not any(geom.inside(q, o) for o in others):
+            return q
+    raise WingError("Teil ist von anderen so eng umgeben, dass der Draht es nicht erreicht - "
+                    "Zusatzabstand erhoehen")
+
+
+def route_parts(parts: list[Part], entry: Point, kerf: float = 0.0) -> tuple[list[Point], list[Point], list[int]]:
     """Cut all parts one after another from the entry point and back to it:
-    nearest port first, travelling around every other part's hull. Returns
-    the side A path, the side B path (same length: the travel points are
-    shared, only the pieces differ) and the cut order."""
+    nearest piece first, travelling around the others at `clearance(kerf)`.
+    The pieces are placed first (as tight as the packing likes); the travel
+    only has to find a way to each one, between neighbours where there is
+    room and around the group where there is none. Returns the side A path,
+    the side B path (same length: the travel points are shared, only the
+    pieces differ) and the cut order."""
+    c = clearance(kerf)
+    obstacles = [geom.grow(p.hull, c) for p in parts]
+    ports = [_port(obstacles[k], parts[k].a[0], obstacles[:k] + obstacles[k + 1:]) for k in range(len(parts))]
     pa: list[Point] = []; pb: list[Point] = []
     pos = entry
     todo = list(range(len(parts)))
     order: list[int] = []
     while todo:
-        k = min(todo, key=lambda k: math.dist(pos, parts[k].port))
+        k = min(todo, key=lambda k: math.dist(pos, ports[k]))
         todo.remove(k); order.append(k)
         part = parts[k]
         # every hull is an obstacle, the target's too: the wire must not cross
         # a piece before cutting it any more than after
-        obstacles = [q.hull for q in parts]
-        leg = geom.route(pos, part.port, obstacles)
+        leg = geom.route(pos, ports[k], obstacles)
         leg = leg[1:] if pa else leg
         pa.extend(leg); pb.extend(leg)
         pa.extend(part.a); pb.extend(part.b)
-        pa.append(part.port); pb.append(part.port)
-        pos = part.port
-    leg = geom.route(pos, entry, [q.hull for q in parts])
+        pa.append(ports[k]); pb.append(ports[k])
+        pos = ports[k]
+    leg = geom.route(pos, entry, obstacles)
     pa.extend(leg[1:]); pb.extend(leg[1:])
     return pa, pb, order
 
@@ -307,7 +317,7 @@ def plan(loops: list[list[Point]], kerf: float, entry_x: float, tab: float = 0.0
     outlines = classify(loops, kerf)
     parts = [part_from_outline(o, tab, kerf=kerf) for o in outlines]
     entry = (entry_x, outlines[0].loop[outlines[0].rear][1])
-    path, _, order = route_parts(parts, entry)
+    path, _, order = route_parts(parts, entry, kerf)
     notes = [f"{len(outlines)} Teil(e), {sum(len(o.holes) for o in outlines)} Loch/Loecher, "
              f"Reihenfolge von hinten: " + ", ".join(str(k + 1) for k in order)
              + (f"; Haltesteg {tab:g} mm an jeder Kontur (von Hand brechen)" if tab > 0 else "")]

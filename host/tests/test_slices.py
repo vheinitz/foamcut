@@ -101,13 +101,13 @@ def test_axes_can_be_chosen_and_mirrored(tmp_path):
     p = sl.build_path(s, machine())
     xs = [q[0] for q in p.root]; ys = [q[1] for q in p.root]
     # slicing along x: the section is y (20) forward by z (100) up
-    from foamcut.contour import clearance
-    assert max(xs) - (s.block_x + s.lead + clearance(0.0)) == pytest.approx(20.0, abs=1e-6)   # hull sits at lead
-    body = [q for q in p.root if q[0] >= s.block_x + s.lead + clearance(0.0) - 1e-6]  # the piece, not port/travel
+    half = sl.pack_gap(s, machine()) / 2
+    assert max(xs) - (s.block_x + s.lead + half) == pytest.approx(20.0, abs=1e-6)   # half the packing gap behind
+    body = [q for q in p.root if q[0] >= s.block_x + s.lead + half - 1e-6]          # the piece, not port/travel
     assert max(q[1] for q in body) - min(q[1] for q in body) == pytest.approx(100.0, abs=1e-6)
     m = sl.build_path(spec(stl=str(tmp_path / "box.stl"), thickness=100.0, index="1", axis="x", up="z", loft=False,
                            mirror=True, block_h=140.0), machine())
-    assert max(q[0] for q in m.root) - (s.block_x + s.lead + clearance(0.0)) == pytest.approx(20.0, abs=1e-6)
+    assert max(q[0] for q in m.root) - (s.block_x + s.lead + half) == pytest.approx(20.0, abs=1e-6)
 
 
 def test_extreme_taper_is_flagged():

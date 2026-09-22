@@ -498,7 +498,7 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
         a = turn(_orient(_section_at(tris, k, z0, i, j, zmin, zmax), spec.mirror))
         b = turn(_orient(_section_at(tris, k, z1, i, j, zmin, zmax), spec.mirror))
         pa, pb = _pair_loft(a, b, spec.points, machine.kerf_mm, _spar(spec))
-        hull = geom.grow(geom.convex_hull(pa + pb), clearance(machine.kerf_mm))
+        hull = geom.convex_hull(pa + pb)
         parts = [Part(pa, pb, hull, f"Scheibe {index}")]
         kind = "verlaufend"
         # how far the straight wire strays from the true, curved skin between the faces
@@ -512,16 +512,21 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
         outlines = classify(mid, machine.kerf_mm)
         parts = [part_from_outline(o, spec.tab, f"Scheibe {index}", machine.kerf_mm) for o in outlines]
         kind = "prismatisch"
-    if spec.gap > 0:                                  # extra foam between neighbours
-        parts = [Part(p.a, p.b, geom.grow(p.hull, spec.gap / 2), p.label) for p in parts]
+    # pieces are packed with half the gap around each: two pieces end up
+    # `gap` apart (cut path to cut path), which the wire can still pass
+    half = pack_gap(spec, machine) / 2
+    parts = [Part(p.a, p.b, geom.grow(p.hull, half), p.label) for p in parts]
     xs = [q[0] for p in parts for q in p.a + p.b]; ys = [q[1] for p in parts for q in p.a + p.b]
     hx = [q[0] for p in parts for q in p.hull]; hy = [q[1] for p in parts for q in p.hull]
     notes.insert(0, f"Scheibe {index} von {count} ({spec.axis} = {z0:.1f}..{z1:.1f}), {kind}, "
                     f"{max(xs) - min(xs):.1f} x {max(ys) - min(ys):.1f} mm")
-    # size/origin: what the piece needs on the board = its hull (travel
-    # clearance included); the lead-in to the rearmost outline point is then
-    # `lead` plus that clearance
     return Slab(index, z0, z1, parts, (max(hx) - min(hx), max(hy) - min(hy)), (min(hx), min(hy)), notes, deg)
+
+
+def pack_gap(spec: SliceSpec, machine: Machine) -> float:
+    """Foam left between two pieces: two kerfs (so the wire can still travel
+    between them at one kerf from each) plus a little, or more if asked."""
+    return max(spec.gap, 2 * clearance(machine.kerf_mm) + 0.5)
 
 
 def _sagitta(pa: list[Point], pb: list[Point], mid_loops: list[list[Point]]) -> float | None:
@@ -621,7 +626,7 @@ def _fits(pl: Placement, w: float, h: float, others: list[Placement]) -> bool:
 Variants = dict[int, Slab]          # rotation -> slab
 
 
-def pack_board(items: list[Variants], w: float, h: float) -> tuple[list[Placement], list[Variants]]:
+def pack_board(items: list[Variants], w: float, h: float, prefer: str = "low") -> tuple[list[Placement], list[Variants]]:
     """Bottom-left packing of the slabs' hulls into w x h: every slab tries
     the candidate corners (area origin, right of / above every placed slab)
     in every rotation variant and takes the lowest, then rearmost, spot.
@@ -639,7 +644,8 @@ def pack_board(items: list[Variants], w: float, h: float) -> tuple[list[Placemen
                 pl = _place(slab, dx, dy)
                 if _fits(pl, w, h, placed):
                     x0, y0, x1, y1 = pl.bbox
-                    key = (y1, x1, deg)               # keep the used rectangle low, then short
+                    # keep the used rectangle low then short, or short then low
+                    key = (y1, x1, deg) if prefer == "low" else (x1, y1, deg)
                     if best is None or key < best[0]:
                         best = (key, pl)
         if best is None:
@@ -666,11 +672,11 @@ def pack(items: list[Variants], w: float, h: float) -> list[list[Placement]]:
         list(items),
     ]
     best = None
-    for order in orders:
+    for order, prefer in ((o, p) for o in orders for p in ("low", "rear")):
         boards: list[list[Placement]] = []
         todo = list(order)
         while todo:
-            placed, todo = pack_board(todo, w, h)
+            placed, todo = pack_board(todo, w, h, prefer)
             if not placed:
                 raise WingError(f"Scheibe {todo[0][0].index} passt nicht auf die Platte ({w:.0f} x {h:.0f} nutzbar)")
             boards.append(placed)
@@ -706,10 +712,11 @@ def build_boards(spec: SliceSpec, machine: Machine) -> tuple[list[Board], list[s
     for b, placed in enumerate(pack(items, w, h), start=1):
         parts: list[Part] = []
         for pl in placed:
+            # placed with the packing gap around them; routing wants the bare hulls back
             parts.extend(Part([(x + x0, y) for x, y in p.a], [(x + x0, y) for x, y in p.b],
-                              [(x + x0, y) for x, y in p.hull], p.label) for p in pl.parts)
+                              geom.convex_hull([(x + x0, y) for x, y in p.a + p.b]), p.label) for p in pl.parts)
         entry = (spec.block_x, parts[0].a[0][1]) if len(placed) == 1 and len(parts) == 1 else (spec.block_x, 0.0)
-        pa, pb, order = route_parts(parts, entry)
+        pa, pb, order = route_parts(parts, entry, machine.kerf_mm)
         y0 = entry[1]
         pa = [(x, y - y0) for x, y in pa]; pb = [(x, y - y0) for x, y in pb]
         path = loft(spec, pa, pb, machine)
