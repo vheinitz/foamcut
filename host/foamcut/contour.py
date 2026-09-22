@@ -30,10 +30,10 @@ CLEARANCE = 1.5         # mm between the travel channel and a cut piece's channe
 
 
 def clearance(kerf: float) -> float:
-    """Distance the travel path keeps from a piece's cut path: both melt a
-    channel of `kerf`, so the paths need a full kerf between them plus a
-    little foam that stays."""
-    return kerf + CLEARANCE
+    """Distance the travel path keeps from a piece's cut path: twice the kerf
+    (Valentin, 2026-09-23: "Draht darf an geschnittenen Teilen schon nah
+    fahren - 2x Schnittbreite"), never under 1.5 mm."""
+    return max(2 * kerf, CLEARANCE)
 
 FIELDS = [
     ("zeichnung", "Zeichnung", [

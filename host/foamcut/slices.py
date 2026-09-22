@@ -45,7 +45,9 @@ FIELDS = [
          "Welche Scheiben geschnitten werden, 1 = am Anfang der Achse: eine Nummer, Liste '2,3,4', Bereich '1-5' "
          "oder 'alle'. Mehrere Scheiben werden nebeneinander auf der Platte angeordnet; passen nicht alle, "
          "haelt das Programm an (M0) und verlangt die naechste Platte.", "text"),
-        ("gap", "Abstand", "mm", "6", "Schaum, der zwischen zwei Scheiben auf der Platte stehen bleibt.", "num"),
+        ("gap", "Zusatzabstand", "mm", "0",
+         "Zusaetzlicher Abstand zwischen zwei Scheiben auf der Platte. Ohne ihn liegen sie so eng, wie der "
+         "Fahrweg des Drahts erlaubt (2 x Schnittbreite zu jedem Teil).", "num"),
         ("loft", "Verlaufend", "ja/nein", "ja",
          "ja: Seite A = Schnitt am Anfang der Scheibe, Seite B = am Ende, der Draht schneidet die "
          "Flaeche dazwischen (glatt). nein: Querschnitt in der Scheibenmitte, beide Seiten gleich (Stufen).", "bool"),
@@ -107,7 +109,7 @@ class SliceSpec:
     mirror: bool = False
     thickness: float = 40.0
     index: str = "1"
-    gap: float = 6.0
+    gap: float = 0.0
     loft: bool = True
     points: int = 120
     spar_side: str = "keine"
@@ -476,39 +478,50 @@ class Slab:
     size: tuple[float, float]       # bounding box of all hulls, w x h
     origin: tuple[float, float]     # bounding box min corner (body coordinates)
     notes: list[str] = field(default_factory=list)
+    deg: int = 0                    # quarter turns applied in the board plane
 
     def shifted(self, dx: float, dy: float) -> list[Part]:
         mv = lambda pts: [(x + dx, y + dy) for x, y in pts]
         return [Part(mv(p.a), mv(p.b), mv(p.hull), p.label) for p in self.parts]
 
 
-def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int) -> Slab:
+def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int, deg: int = 0) -> Slab:
+    """The slab as a cut part; `deg` turns the section in the board plane
+    (quarter turns, for tighter packing) before the paths are built, so the
+    rearmost point, the pairing of the faces and the slits all follow."""
     k, i, j = _frame(spec)
     z0 = zmin + (index - 1) * spec.thickness
     z1 = min(z0 + spec.thickness, zmax)
     notes: list[str] = []
+    turn = lambda loops: [_rotated(l, deg) for l in loops]
     if spec.loft:
-        a = _orient(_section_at(tris, k, z0, i, j, zmin, zmax), spec.mirror)
-        b = _orient(_section_at(tris, k, z1, i, j, zmin, zmax), spec.mirror)
+        a = turn(_orient(_section_at(tris, k, z0, i, j, zmin, zmax), spec.mirror))
+        b = turn(_orient(_section_at(tris, k, z1, i, j, zmin, zmax), spec.mirror))
         pa, pb = _pair_loft(a, b, spec.points, machine.kerf_mm, _spar(spec))
         hull = geom.grow(geom.convex_hull(pa + pb), clearance(machine.kerf_mm))
         parts = [Part(pa, pb, hull, f"Scheibe {index}")]
         kind = "verlaufend"
         # how far the straight wire strays from the true, curved skin between the faces
-        mid = _orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror)
+        mid = turn(_orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror))
         sag = _sagitta(pa, pb, mid)
         if sag is not None:
             notes.append(f"Scheibe {index}: Sehnenfehler max {sag:.2f} mm (gerader Draht gegen die runde Haut)")
     else:
-        mid = _orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror)
+        mid = turn(_orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror))
         mid, _ = _prepare(mid, _spar(spec))
         outlines = classify(mid, machine.kerf_mm)
         parts = [part_from_outline(o, spec.tab, f"Scheibe {index}", machine.kerf_mm) for o in outlines]
         kind = "prismatisch"
+    if spec.gap > 0:                                  # extra foam between neighbours
+        parts = [Part(p.a, p.b, geom.grow(p.hull, spec.gap / 2), p.label) for p in parts]
     xs = [q[0] for p in parts for q in p.a + p.b]; ys = [q[1] for p in parts for q in p.a + p.b]
+    hx = [q[0] for p in parts for q in p.hull]; hy = [q[1] for p in parts for q in p.hull]
     notes.insert(0, f"Scheibe {index} von {count} ({spec.axis} = {z0:.1f}..{z1:.1f}), {kind}, "
                     f"{max(xs) - min(xs):.1f} x {max(ys) - min(ys):.1f} mm")
-    return Slab(index, z0, z1, parts, (max(xs) - min(xs), max(ys) - min(ys)), (min(xs), min(ys)), notes)
+    # size/origin: what the piece needs on the board = its hull (travel
+    # clearance included); the lead-in to the rearmost outline point is then
+    # `lead` plus that clearance
+    return Slab(index, z0, z1, parts, (max(hx) - min(hx), max(hy) - min(hy)), (min(hx), min(hy)), notes, deg)
 
 
 def _sagitta(pa: list[Point], pb: list[Point], mid_loops: list[list[Point]]) -> float | None:
@@ -552,44 +565,120 @@ def _usable(spec: SliceSpec, machine: Machine) -> tuple[float, float]:
     return w, h
 
 
-def pack(slabs: list[Slab], w: float, h: float, gap: float) -> list[list[tuple[Slab, float, float]]]:
-    """Shelf packing, rows from the bottom, tallest first; a slab that does
-    not fit the current board starts the next. Returns per board
-    [(slab, dx, dy)] with the offsets that move the slab's bounding-box
-    corner to its place (area coordinates, origin bottom-rear)."""
-    order = sorted(slabs, key=lambda s: -s.size[1])
-    boards: list[list[tuple[Slab, float, float]]] = []
-    for s in order:
-        sw, sh = s.size
-        if sw > w + 1e-6 or sh > h + 1e-6:
-            raise WingError(f"Scheibe {s.index} ({sw:.0f} x {sh:.0f} mm) passt nicht auf die Platte ({w:.0f} x {h:.0f} nutzbar)")
-        placed = False
-        for board in boards:
-            # rows: y of the shelf, its height, the x cursor
-            rows = board_rows(board, gap)
-            for ry, rh, rx in rows:
-                if sh <= rh + 1e-6 and rx + sw <= w + 1e-6:
-                    board.append((s, rx, ry)); placed = True; break
-            if placed:
-                break
-            top = max((ry + rh for ry, rh, _ in rows), default=-gap) + gap
-            if top + sh <= h + 1e-6:
-                board.append((s, 0.0, top)); placed = True; break
-        if not placed:
-            boards.append([(s, 0.0, 0.0)])
-    return boards
+def _rotated(pts: list[Point], deg: int) -> list[Point]:
+    if deg == 0:
+        return list(pts)
+    c, sn = {90: (0, 1), 180: (-1, 0), 270: (0, -1)}[deg]
+    return [(x * c - y * sn, x * sn + y * c) for x, y in pts]
 
 
-def board_rows(board: list[tuple[Slab, float, float]], gap: float) -> list[tuple[float, float, float]]:
-    rows: dict[float, list[tuple[Slab, float, float]]] = {}
-    for s, dx, dy in board:
-        rows.setdefault(dy, []).append((s, dx, dy))
-    out = []
-    for ry, items in sorted(rows.items()):
-        rh = max(s.size[1] for s, _, _ in items)
-        rx = max(dx + s.size[0] for s, dx, _ in items) + gap
-        out.append((ry, rh, rx))
-    return out
+def _overlap(a: list[Point], b: list[Point]) -> bool:
+    """Convex polygons overlap (separating axis theorem); touching counts as free."""
+    for poly in (a, b):
+        n = len(poly)
+        for i in range(n):
+            ex, ey = poly[(i + 1) % n][0] - poly[i][0], poly[(i + 1) % n][1] - poly[i][1]
+            nx, ny = -ey, ex
+            pa = [nx * x + ny * y for x, y in a]; pb = [nx * x + ny * y for x, y in b]
+            if max(pa) <= min(pb) + 1e-9 or max(pb) <= min(pa) + 1e-9:
+                return False
+    return True
+
+
+@dataclass
+class Placement:
+    slab: Slab                      # the chosen rotation variant
+    dx: float
+    dy: float
+    parts: list[Part]               # shifted into area coordinates (origin bottom-rear of the usable area)
+
+    @property
+    def hulls(self) -> list[list[Point]]:
+        return [p.hull for p in self.parts]
+
+    @property
+    def bbox(self) -> tuple[float, float, float, float]:
+        xs = [q[0] for h in self.hulls for q in h]; ys = [q[1] for h in self.hulls for q in h]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    @property
+    def deg(self) -> int:
+        return self.slab.deg
+
+
+def _place(slab: Slab, dx: float, dy: float) -> Placement:
+    ox, oy = dx - slab.origin[0], dy - slab.origin[1]       # hull bounding box corner -> (dx, dy)
+    return Placement(slab, dx, dy, slab.shifted(ox, oy))
+
+
+def _fits(pl: Placement, w: float, h: float, others: list[Placement]) -> bool:
+    x0, y0, x1, y1 = pl.bbox
+    if x0 < -1e-9 or y0 < -1e-9 or x1 > w + 1e-9 or y1 > h + 1e-9:
+        return False
+    return not any(_overlap(hp, ho) for hp in pl.hulls for o in others for ho in o.hulls)
+
+
+Variants = dict[int, Slab]          # rotation -> slab
+
+
+def pack_board(items: list[Variants], w: float, h: float) -> tuple[list[Placement], list[Variants]]:
+    """Bottom-left packing of the slabs' hulls into w x h: every slab tries
+    the candidate corners (area origin, right of / above every placed slab)
+    in every rotation variant and takes the lowest, then rearmost, spot.
+    Returns the placements and the items that did not fit."""
+    placed: list[Placement] = []
+    left: list[Variants] = []
+    for variants in items:
+        cands = [(0.0, 0.0)]
+        for o in placed:
+            x0, y0, x1, y1 = o.bbox
+            cands += [(x1, y0), (x0, y1), (x1, 0.0), (0.0, y1)]
+        best = None
+        for dx, dy in cands:
+            for deg, slab in variants.items():
+                pl = _place(slab, dx, dy)
+                if _fits(pl, w, h, placed):
+                    x0, y0, x1, y1 = pl.bbox
+                    key = (y1, x1, deg)               # keep the used rectangle low, then short
+                    if best is None or key < best[0]:
+                        best = (key, pl)
+        if best is None:
+            left.append(variants)
+        else:
+            placed.append(best[1])
+    return placed, left
+
+
+def pack(items: list[Variants], w: float, h: float) -> list[list[Placement]]:
+    """Boards of placements: the order the slabs are tried in matters, so a
+    few orders are tried and the one with the fewest boards, then the
+    smallest enclosing rectangle on the first board, wins."""
+    for variants in items:
+        if not any(sl.size[0] <= w + 1e-6 and sl.size[1] <= h + 1e-6 for sl in variants.values()):
+            sl = variants[0]
+            raise WingError(f"Scheibe {sl.index} ({sl.size[0]:.0f} x {sl.size[1]:.0f} mm) passt nicht auf die Platte "
+                            f"({w:.0f} x {h:.0f} nutzbar)")
+    area = lambda v: v[0].size[0] * v[0].size[1]
+    orders = [
+        sorted(items, key=lambda v: -area(v)),
+        sorted(items, key=lambda v: -v[0].size[1]),
+        sorted(items, key=lambda v: -v[0].size[0]),
+        list(items),
+    ]
+    best = None
+    for order in orders:
+        boards: list[list[Placement]] = []
+        todo = list(order)
+        while todo:
+            placed, todo = pack_board(todo, w, h)
+            if not placed:
+                raise WingError(f"Scheibe {todo[0][0].index} passt nicht auf die Platte ({w:.0f} x {h:.0f} nutzbar)")
+            boards.append(placed)
+        x1 = max(pl.bbox[2] for pl in boards[0]); y1 = max(pl.bbox[3] for pl in boards[0])
+        key = (len(boards), x1 * y1, x1)
+        if best is None or key < best[0]:
+            best = (key, boards)
+    return best[1]
 
 
 @dataclass
@@ -603,32 +692,35 @@ class Board:
 def build_boards(spec: SliceSpec, machine: Machine) -> tuple[list[Board], list[str]]:
     tris, zmin, zmax, count = _body(spec)
     indices = parse_indices(spec.index, count)
-    slabs = [_slab(spec, machine, tris, zmin, zmax, count, n) for n in indices]
     w, h = _usable(spec, machine)
     boards: list[Board] = []
     notes: list[str] = []
     x0 = spec.block_x + spec.lead                     # rear edge of the usable area
-    # the travel path runs on the pieces' hulls: two hulls must not overlap
-    gap = max(spec.gap, 2 * clearance(machine.kerf_mm) + 1.0)
-    if gap > spec.gap:
-        notes.append(f"Abstand zwischen den Scheiben auf {gap:g} mm erhoeht (Kerf {machine.kerf_mm:g}: "
-                     f"zwei Schmelzkanaele plus Steg)")
-    for b, placed in enumerate(pack(slabs, w, h, gap), start=1):
+    # turning pieces by quarter turns packs tighter; not with a spar slot (its
+    # "oben" would turn too), not with a tab (the walk is no longer closed),
+    # and pointless for a single piece
+    rotations = (0,) if spec.spar_side != "keine" or spec.tab > 0 or len(indices) == 1 else (0, 90, 180, 270)
+    items: list[Variants] = [{deg: _slab(spec, machine, tris, zmin, zmax, count, n, deg) for deg in rotations}
+                             for n in indices]
+    slabs = [v[0] for v in items]
+    for b, placed in enumerate(pack(items, w, h), start=1):
         parts: list[Part] = []
-        for s, dx, dy in placed:
-            parts.extend(s.shifted(x0 + dx - s.origin[0], dy - s.origin[1]))
+        for pl in placed:
+            parts.extend(Part([(x + x0, y) for x, y in p.a], [(x + x0, y) for x, y in p.b],
+                              [(x + x0, y) for x, y in p.hull], p.label) for p in pl.parts)
         entry = (spec.block_x, parts[0].a[0][1]) if len(placed) == 1 and len(parts) == 1 else (spec.block_x, 0.0)
         pa, pb, order = route_parts(parts, entry)
         y0 = entry[1]
         pa = [(x, y - y0) for x, y in pa]; pb = [(x, y - y0) for x, y in pb]
         path = loft(spec, pa, pb, machine)
-        used_w = max(dx + s.size[0] for s, dx, _ in placed)
-        used_h = max(dy + s.size[1] for s, _, dy in placed)
-        nums = sorted(s.index for s, _, _ in placed)
+        used_w = max(pl.bbox[2] for pl in placed)
+        used_h = max(pl.bbox[3] for pl in placed)
+        nums = sorted(pl.slab.index for pl in placed)
         boards.append(Board(b, path, nums, (used_w, used_h)))
+        turned = [f"{pl.slab.index} um {pl.deg}°" for pl in placed if pl.deg]
         notes.append(f"Platte {b}: Scheiben {', '.join(map(str, nums))} in Schnittreihenfolge "
                      f"{', '.join(parts[k].label.split()[-1] for k in order)}; belegt {used_w:.0f} x {used_h:.0f} mm "
-                     f"von {w:.0f} x {h:.0f} nutzbar")
+                     f"von {w:.0f} x {h:.0f} nutzbar" + (f"; gedreht: {', '.join(turned)}" if turned else ""))
     for s in slabs:
         notes.extend(s.notes)
     return boards, notes
