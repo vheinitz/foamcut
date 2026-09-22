@@ -290,6 +290,86 @@ def surface_y(loop: list[Point], x: float, top: bool) -> float:
     return best
 
 
+def surface_at(loop: list[Point], x: float, top: bool) -> tuple[Point, Point, Point]:
+    """Point, unit tangent and inward unit normal of the upper (top=True) or
+    lower surface of a closed loop at x."""
+    m = len(loop)
+    best = None
+    for i in range(m):
+        a, b = loop[i], loop[(i + 1) % m]
+        if a[0] == b[0] or (a[0] - x) * (b[0] - x) > 0:
+            continue
+        y = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])
+        if best is None or (y > best[0][1] if top else y < best[0][1]):
+            best = ((x, y), (b[0] - a[0], b[1] - a[1]))
+    if best is None:
+        raise ValueError(f"X={x:g} liegt ausserhalb der Kontur")
+    (px, py), (tx, ty) = best
+    ln = math.hypot(tx, ty) or 1.0
+    t = (tx / ln, ty / ln)
+    n = (t[1], -t[0])
+    if not inside((px + n[0] * 1e-4, py + n[1] * 1e-4), loop):     # point into the body
+        n = (-n[0], -n[1])
+    return (px, py), t, n
+
+
+def notch_normal(loop: list[Point], x: float, w: float, h: float, top: bool) -> tuple[list[Point], list[int]]:
+    """Cut a slot of w x h into the loop at chord position x, square to the
+    skin there (a strip glued on the surface sits flat in it), not upright.
+    Returns the new loop and the indices of its four slot corners."""
+    if w <= 0 or h <= 0:
+        raise ValueError("Nut: Breite und Hoehe muessen > 0 sein")
+    p, t, n = surface_at(loop, x, top)
+    m = len(loop)
+    walls = []
+    for sgn in (1.0, -1.0):
+        base = (p[0] + t[0] * sgn * w / 2, p[1] + t[1] * sgn * w / 2)
+        far_a = (base[0] - n[0] * 1e4, base[1] - n[1] * 1e4)
+        far_b = (base[0] + n[0] * 1e4, base[1] + n[1] * 1e4)
+        best = None
+        for i in range(m):
+            a, b = loop[i], loop[(i + 1) % m]
+            u = seg_intersect(far_a, far_b, a, b)
+            if u is None:
+                continue
+            pt = (far_a[0] + (far_b[0] - far_a[0]) * u, far_a[1] + (far_b[1] - far_a[1]) * u)
+            d = math.dist(pt, base)
+            if best is None or d < best[0]:
+                best = (d, i, pt)
+        if best is None:
+            raise ValueError(f"Nut bei X={x:g} passt nicht auf die Kontur")
+        walls.append(best)
+    (_, e1, m1), (_, e2, m2) = walls
+    pts = list(loop)
+    ins = sorted(((e1, m1), (e2, m2)), key=lambda kv: -kv[0])
+    idx = {}
+    for e, pt in ins:                     # from the back, so earlier insertions keep their edge
+        at = e + 1
+        for q in list(idx):
+            if idx[q] >= at:
+                idx[q] += 1
+        pts.insert(at, pt); idx[pt] = at
+    i1, i2 = idx[m1], idx[m2]
+    n_pts = len(pts)
+
+    def arc(i, j):
+        out = [i]
+        k = (i + 1) % n_pts
+        while k != j:
+            out.append(k); k = (k + 1) % n_pts
+        return out + [j]
+    a12, a21 = arc(i1, i2), arc(i2, i1)
+    length = lambda a: sum(math.dist(pts[a[k]], pts[a[k + 1]]) for k in range(len(a) - 1))
+    keep_from, keep_to = (i2, i1) if length(a12) < length(a21) else (i1, i2)   # replace the short arc
+    s1 = (pts[keep_to][0] - p[0]) * n[0] + (pts[keep_to][1] - p[1]) * n[1]
+    s2 = (pts[keep_from][0] - p[0]) * n[0] + (pts[keep_from][1] - p[1]) * n[1]
+    floor = max(s1, s2) + h
+    f_to = (pts[keep_to][0] + n[0] * (floor - s1), pts[keep_to][1] + n[1] * (floor - s1))
+    f_from = (pts[keep_from][0] + n[0] * (floor - s2), pts[keep_from][1] + n[1] * (floor - s2))
+    kept = [pts[k] for k in arc(keep_from, keep_to)]          # the long way round, outside the slot
+    return kept + [f_to, f_from], [len(kept) - 1, len(kept), len(kept) + 1, 0]
+
+
 def notch(loop: list[Point], x1: float, x2: float, y_end: float, side: str) -> tuple[list[Point], list[int]]:
     """Cut a slot into a CCW loop: from the top (side 'oben') or the bottom
     edge, between x1 < x2, down/up to y_end. Returns the new loop and the

@@ -1,5 +1,5 @@
 {
-  "cut_feed": 100.0,
+  "cut_feed": 200.0,
   "homing": {
     "auto": true,
     "enabled": true,
@@ -19,7 +19,7 @@
     },
     "offset_mm": {
       "U": 0.0,
-      "V": 0.0,
+      "V": 5.0,
       "X": 0.0,
       "Y": 0.0
     },
@@ -34,7 +34,7 @@
     "Y": true
   },
   "jog_feed": 375.0,
-  "kerf_mm": 2.0,
+  "kerf_mm": 3.0,
   "max_rate": {
     "U": 375.0,
     "V": 137.9,
@@ -52,11 +52,11 @@
   "tower_gap_mm": 615.0,
   "travel_mm": {
     "U": 218.0,
-    "V": 128.0,
+    "V": 123.0,
     "X": 218.0,
     "Y": 128.0
   },
   "warmup_s": 3.0,
   "wire_fixed_tower": 2,
-  "wire_power": 100
+  "wire_power": 153
 }

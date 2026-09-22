@@ -534,28 +534,57 @@ def test_spar_syntax():
             parse_spars(bad)
 
 
-def test_spar_notch_is_cut_and_scales_with_the_chord():
-    plain = build_path(spec(), machine(kerf=0.0), AIRFOILS)
-    s = spec(spars="30% oben 6x4")
-    p = build_path(s, machine(kerf=0.0), AIRFOILS)
-    assert len(p.root) == len(p.tip)                      # both sides still pair point for point
-    assert any("Holmnuten" in n for n in p.notes)
-
-    def slot(pts, chord, te_x):
+def test_spar_notch_is_cut_square_to_the_skin_and_scales_with_the_chord():
+    from foamcut import airfoil as af, geom
+    from foamcut.wing import apply_spars, parse_spars, _profile_mm
+    s = spec()
+    _, up, lo = af.load(AIRFOILS / s.root_airfoil)
+    base = _profile_mm(af.resample_loop(up, lo, s.points), s.root_chord, 0.0, 0.0, 0.0, 0.0, None)
+    for chord, te_x in ((s.root_chord, 0.0), (s.tip_chord, 20.0)):
+        prof = _profile_mm(af.resample_loop(up, lo, s.points), chord, te_x, 0.0, 0.0, 0.0, None)
+        outer, holes, keys = apply_spars(prof, chord, te_x, parse_spars("30% oben 6x4"))
+        assert len(keys) == 4 and not holes
+        corners = [outer[k] for k in keys]
+        mouth = sorted(corners, key=lambda q: -q[1])[:2]          # the two at the skin
+        floor = sorted(corners, key=lambda q: q[1])[:2]
+        assert math.dist(floor[0], floor[1]) == pytest.approx(6.0, abs=1e-6)     # 6 mm wide
+        wall = min(math.dist(m, f) for m in mouth for f in floor)
+        assert wall == pytest.approx(4.0, abs=1e-6)                              # 4 mm deep
+        # the slot sits at 30 % of the local chord, square to the skin there
         x = te_x + chord - 0.30 * chord
-        top = max(q[1] for q in pts)
-        floor = [q for q in pts if abs(q[0] - (x - 3)) < 1e-6 or abs(q[0] - (x + 3)) < 1e-6]
-        assert floor, (x, top)
-        return min(q[1] for q in floor)
-    te_x = s.block_x + s.lead
-    # the slot sits at 30 % of the local chord on both sides, 4 mm deep
-    assert slot(p.root, s.root_chord, te_x) < max(q[1] for q in p.root)
-    assert slot(p.tip, s.tip_chord, te_x + s.root_chord - s.tip_chord) < max(q[1] for q in p.tip)
-    assert abs(max(q[1] for q in p.root) - max(q[1] for q in plain.root)) < 0.05    # skin untouched (resampled)
+        assert (mouth[0][0] + mouth[1][0]) / 2 == pytest.approx(x, abs=0.2)
+        _, t, n = geom.surface_at(prof[:-1], x, True)
+        v = (floor[0][0] - floor[1][0], floor[0][1] - floor[1][1])
+        assert abs(v[0] * n[0] + v[1] * n[1]) < 1e-6                             # floor parallel to the skin
+
+
+def test_spar_notch_pairs_both_sides_in_the_cut():
+    s = spec(holm1="30% oben 6x4")
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
+    plain = build_path(spec(), machine(kerf=0.0), AIRFOILS)
+    assert len(p.root) == len(p.tip) and any("Holmnuten" in n for n in p.notes)
+    assert abs(max(q[1] for q in p.root) - max(q[1] for q in plain.root)) < 0.05     # skin untouched
+
+
+def test_several_spars_all_get_cut():
+    s = spec(holm1="25% oben 6x4", holm3="60% oben 5x4", holm5="45% unten 8x3")
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
+    plain = build_path(spec(), machine(kerf=0.0), AIRFOILS)
+    assert len(p.root) == len(p.tip)
+    note = next(n for n in p.notes if n.startswith("Holmnuten"))
+    assert note.count("%") == 3 and "unten" in note and note.count("oben") == 2
+    # three slots -> the outline lost area; every slot floor is somewhere inside
+    from foamcut import geom
+    assert abs(geom.signed_area(p.root[:-1])) < abs(geom.signed_area(plain.root[:-1])) - 6 * 4 - 5 * 4 - 8 * 3 + 2
+
+
+def test_legacy_one_line_spar_field_still_works():
+    p = build_path(spec(spars="30% oben 6x4"), machine(kerf=0.0), AIRFOILS)
+    assert any("Holmnuten" in n for n in p.notes)
 
 
 def test_inner_holes_are_only_in_the_body_not_in_the_wire_path():
-    p = build_path(spec(spars="55% innen 5x4"), machine(kerf=0.0), AIRFOILS)
+    p = build_path(spec(holm1="55% innen 5x4"), machine(kerf=0.0), AIRFOILS)
     assert any("Innenloecher" in n and "STL" in n for n in p.notes)
     assert p.root == build_path(spec(), machine(kerf=0.0), AIRFOILS).root      # cut unchanged
 
@@ -564,7 +593,7 @@ def test_stl_is_a_watertight_body_with_the_spar_slots():
     from collections import Counter
     from foamcut import geom, slices as sl
     from foamcut.wing import to_stl
-    s = spec(spars="30% oben 6x4; 55% innen 5x4", panel=400.0)
+    s = spec(holm1="30% oben 6x4", holm2="55% innen 5x4", panel=400.0)
     data = to_stl(s, machine(), AIRFOILS)
     assert data[:7] == b"foamcut" and len(data) > 84
     tris = sl.load_stl_bytes(data) if hasattr(sl, "load_stl_bytes") else None
