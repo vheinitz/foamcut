@@ -263,6 +263,22 @@ Stromisolierung. Welchen Draht nehme ich dafür mit großer R-Schwankung von T?�
   trotzdem selbst wickeln will: Nickeldraht **in Reihe zur Messbrücke**, nicht
   an den Thermistoreingang.
 
+**Einkaufsliste, falls es gebaut wird** (Stand 2026-09-23, nichts davon
+gekauft oder geprüft):
+- Fühler: „PT1000 Dünnschicht Klasse B, 2 × 2 mm, bis 500 °C“ oder ein
+  PT100-Sensorelement M222. **Keine keramischen PTC/Kaltleiter** (MZ-, PTC-
+  „Posistor“-Serien): die sind Heizelemente und Schutzwiderstände, ihre
+  Kennlinie ist bis zur Curie-Temperatur flach und springt dann um Zehnerpotenzen
+  – damit lässt sich nichts messen. Prüfkriterium beim Kauf: gibt das
+  Datenblatt eine R(T)-Tabelle oder -Kurve über den ganzen Bereich an?
+- Isolation Draht ↔ Fühler: Glimmerplättchen (Mica) 0,1 mm.
+- Kapsel: Keramikfaserpapier/-band (biolöslich, „Superwool“) 1–2 mm, außen
+  Glasgewebeband (bis ~550 °C; selbstklebende Varianten halten nur ~200 °C,
+  also besser binden statt kleben).
+- Binden: Glasseidezwirn oder 0,2-mm-Edelstahldraht.
+- Zuleitung: Keramik-Perlrohr oder Glasfaserschlauch über die Litzen,
+  verdrillt und weg von der Heizdrahtleitung; ganze Kapsel unter 2 g.
+
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.
 - Winde mit Drehzahlregelung für reproduzierbare Rampenstarts.
