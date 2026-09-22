@@ -501,5 +501,15 @@ def slice_from_text(text: str) -> dict[str, str]:
     return from_text(text, FIELDS)
 
 
+def preview(spec: SliceSpec):
+    """The body, its frame, the slab being cut and all slice planes."""
+    tris, zmin, zmax, count = _body(spec)
+    k = AXES3.index(spec.axis); j = AXES3.index(spec.up)
+    z0 = zmin + (min(spec.index, count) - 1) * spec.thickness
+    planes = [zmin + n * spec.thickness for n in range(count + 1)]
+    planes[-1] = min(planes[-1], zmax)
+    return tris, k, j, z0, min(z0 + spec.thickness, zmax), planes
+
+
 SLICE_MODEL = Model("Scheiben", "slices", FIELDS, SliceSpec.parse, generate, slice_name, slice_to_text,
-                    slice_from_text, TEMPLATE, "slices (*.slices);;alle (*)")
+                    slice_from_text, TEMPLATE, "slices (*.slices);;alle (*)", preview, "mesh")

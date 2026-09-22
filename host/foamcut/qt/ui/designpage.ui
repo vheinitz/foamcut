@@ -44,9 +44,33 @@
           </widget>
          </item>
          <item>
-          <widget class="QSplitter" name="views">
-           <property name="orientation"><enum>Qt::Vertical</enum></property>
+          <widget class="QTabWidget" name="view_tabs">
            <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
+           <property name="documentMode"><bool>true</bool></property>
+           <widget class="QWidget" name="tab_diagram">
+            <attribute name="title"><string>Diagramm</string></attribute>
+            <layout class="QVBoxLayout" name="diagram_layout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>4</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item>
+              <widget class="QSplitter" name="views">
+               <property name="orientation"><enum>Qt::Vertical</enum></property>
+               <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="tab_object">
+            <attribute name="title"><string>Objekt</string></attribute>
+            <layout class="QVBoxLayout" name="object_layout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>4</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+            </layout>
+           </widget>
           </widget>
          </item>
          <item>

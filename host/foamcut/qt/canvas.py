@@ -374,3 +374,137 @@ class SimView(MmCanvas):
             p.drawLine(QPointF(o.x() - 12, o.y()), QPointF(o.x() + 12, o.y()))
             p.drawLine(QPointF(o.x(), o.y() - 12), QPointF(o.x(), o.y() + 12))
             self.label(p, self.live[0], self.live[1], f"{self.live[0]:.1f} / {self.live[1]:.1f}", C["live"], dx=10, dy=-8)
+
+
+class ObjectView(MmCanvas):
+    """The source drawing of a contour: every outline in mm, outer ones dark,
+    holes lighter, size and count in the corner."""
+
+    def __init__(self, parent=None):
+        super().__init__("Zeichnung   X →   Y ↑", parent)
+        self.loops: list = []
+        self.holes: set = set()
+
+    def set_object(self, data):
+        loops, holes = data
+        self.loops, self.holes = loops, set(holes)
+        if loops:
+            xs = [p[0] for l in loops for p in l]; ys = [p[1] for l in loops for p in l]
+            self.set_box(min(xs), max(xs), min(ys), max(ys), 0.08)
+        self.update()
+
+    def draw(self, p: QPainter):
+        self.grid(p)
+        for i, loop in enumerate(self.loops):
+            hole = i in self.holes
+            self.polyline(p, loop + [loop[0]], C["tip"] if hole else C["face"], 1.2 if hole else 2.0)
+        if self.loops:
+            xs = [q[0] for l in self.loops for q in l]; ys = [q[1] for l in self.loops for q in l]
+            self.label(p, min(xs), max(ys), f"{len(self.loops)} Konturen, {max(xs) - min(xs):.1f} x {max(ys) - min(ys):.1f} mm",
+                       C["text"], dy=-6, size=9)
+
+
+class MeshView(QWidget):
+    """Shaded orthographic view of an STL body, dragged to rotate, wheel to
+    zoom. The slab being cut is highlighted, the slice planes are drawn."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.tris: list = []
+        self.axis = 2; self.up = 1
+        self.z0 = self.z1 = 0.0; self.planes: list[float] = []
+        self.yaw, self.pitch = 0.6, 0.35
+        self.zoom = 1.0
+        self._last = None
+        self.setMinimumHeight(160)
+        self.setAutoFillBackground(True)
+        pal = self.palette(); pal.setColor(self.backgroundRole(), C["bg"]); self.setPalette(pal)
+        self.setToolTip("Ziehen dreht, Rad zoomt")
+
+    def set_object(self, data):
+        self.tris, self.axis, self.up, self.z0, self.z1, self.planes = data
+        self._prep()
+        self.update()
+
+    def _prep(self):
+        pts = [v for t in self.tris for v in t]
+        if not pts:
+            return
+        lo = [min(p[i] for p in pts) for i in range(3)]; hi = [max(p[i] for p in pts) for i in range(3)]
+        self.centre = [(a + b) / 2 for a, b in zip(lo, hi)]
+        self.radius = max(math.dist(lo, hi) / 2, 1e-6)
+
+    # body frame: forward axis i, up axis j, slicing axis k -> view coordinates
+    def _rot(self, v):
+        k = self.axis; j = self.up; i = ({0, 1, 2} - {k, j}).pop()
+        x, y, z = v[i] - self.centre[i], v[j] - self.centre[j], v[k] - self.centre[k]
+        cy, sy = math.cos(self.yaw), math.sin(self.yaw)
+        x, z = x * cy + z * sy, -x * sy + z * cy
+        cp, sp = math.cos(self.pitch), math.sin(self.pitch)
+        y, z = y * cp - z * sp, y * sp + z * cp
+        return x, y, z
+
+    def _tr(self, v):
+        x, y, _ = self._rot(v)
+        s = min(self.width(), self.height()) * 0.45 * self.zoom / self.radius
+        return QPointF(self.width() / 2 + x * s, self.height() / 2 - y * s)
+
+    def paintEvent(self, ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.tris:
+            p.setPen(QPen(C["text"])); p.drawText(QPointF(8, 16), "kein Koerper geladen"); p.end(); return
+        light = (0.3, 0.8, 0.55)
+        faces = []
+        for t in self.tris:
+            r = [self._rot(v) for v in t]
+            ux, uy, uz = r[1][0] - r[0][0], r[1][1] - r[0][1], r[1][2] - r[0][2]
+            vx, vy, vz = r[2][0] - r[0][0], r[2][1] - r[0][1], r[2][2] - r[0][2]
+            nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+            ln = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
+            if nz < 0:                                    # back face
+                continue
+            shade = max(0.0, (nx * light[0] + ny * light[1] + nz * light[2]) / ln)
+            zc = sum(v[self.axis] for v in t) / 3
+            depth = sum(q[2] for q in r) / 3
+            faces.append((depth, shade, self.z0 - 1e-6 <= zc <= self.z1 + 1e-6, t))
+        faces.sort(key=lambda f: f[0])
+        p.setPen(Qt.PenStyle.NoPen)
+        from PyQt6.QtGui import QPolygonF
+        for _, shade, cut, t in faces:
+            base = QColor("#e67e22") if cut else QColor("#9db6d6")
+            col = QColor(int(base.red() * (0.35 + 0.65 * shade)), int(base.green() * (0.35 + 0.65 * shade)),
+                         int(base.blue() * (0.35 + 0.65 * shade)))
+            p.setBrush(col)
+            p.drawPolygon(QPolygonF([self._tr(v) for v in t]))
+        # slice planes as dashed outlines of the body's bounding box section
+        pts = [v for t in self.tris for v in t]
+        i = ({0, 1, 2} - {self.axis, self.up}).pop(); j = self.up; k = self.axis
+        lo_i, hi_i = min(v[i] for v in pts), max(v[i] for v in pts)
+        lo_j, hi_j = min(v[j] for v in pts), max(v[j] for v in pts)
+        pen = QPen(C["axis"], 1); pen.setStyle(Qt.PenStyle.DashLine); p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
+        for z in self.planes:
+            corners = []
+            for a, b in ((lo_i, lo_j), (hi_i, lo_j), (hi_i, hi_j), (lo_i, hi_j)):
+                v = [0.0, 0.0, 0.0]; v[i], v[j], v[k] = a, b, z
+                corners.append(self._tr(v))
+            p.drawPolygon(QPolygonF(corners))
+        p.setPen(QPen(C["text"])); p.setFont(QFont("Sans", 9))
+        p.drawText(QPointF(8, 16), f"{len(self.tris)} Dreiecke, Scheibe {self.z0:.0f}..{self.z1:.0f} markiert; ziehen = drehen")
+        p.end()
+
+    def mousePressEvent(self, ev):
+        self._last = ev.position()
+
+    def mouseMoveEvent(self, ev):
+        if self._last is not None:
+            d = ev.position() - self._last
+            self.yaw += d.x() * 0.01; self.pitch = max(-1.5, min(1.5, self.pitch + d.y() * 0.01))
+            self._last = ev.position(); self.update()
+
+    def mouseReleaseEvent(self, ev):
+        self._last = None
+
+    def wheelEvent(self, ev):
+        self.zoom = max(0.2, min(8.0, self.zoom * (1.1 if ev.angleDelta().y() > 0 else 0.9)))
+        self.update()

@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QFr
 from .. import gcode as gc
 from ..machine import Machine
 from ..wing import WING_MODEL, Model, WingError, field_catalogue
-from .canvas import LAYERS, FrontView, TopView, ViewFrame
+from .canvas import LAYERS, FrontView, MeshView, ObjectView, TopView, ViewFrame
 from .state import UiState
 from .uiload import load_ui
 
@@ -111,6 +111,14 @@ class DesignPage(QWidget):
         self.front = FrontView()
         self.top = TopView()
         self.views.addWidget(ViewFrame(self.front)); self.views.addWidget(ViewFrame(self.top)); self.views.setSizes([460, 220])
+        # "Objekt" tab: the source drawing / body of models that have one
+        self.object_view = None
+        if self.model.preview_kind == "loops":
+            self.object_view = ObjectView(); self.object_layout.addWidget(ViewFrame(self.object_view))
+        elif self.model.preview_kind == "mesh":
+            self.object_view = MeshView(); self.object_layout.addWidget(self.object_view)
+        else:
+            self.view_tabs.removeTab(self.view_tabs.indexOf(self.tab_object))
         shown = state.get(f"{model.key}_layers", {})
         self.layer_boxes: dict[str, QCheckBox] = {}
         for i, (key, text) in enumerate(LAYERS):
@@ -276,6 +284,11 @@ class DesignPage(QWidget):
             self.front.show_path(None, self.machine); self.top.show_path(None)
             return False
         self.spec, self.path, self.gcode = spec, path, code
+        if self.object_view is not None:
+            try:
+                self.object_view.set_object(self.model.preview(spec))
+            except (WingError, ValueError, OSError) as e:
+                self.log(f"! Vorschau: {e}")
         # chords derived from the area: show them, but do not let them be typed
         if hasattr(spec, "area"):
             derived = spec.area is not None

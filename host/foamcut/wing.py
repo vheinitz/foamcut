@@ -600,6 +600,8 @@ class Model:
     from_text: object           # text -> values
     template: str
     file_filter: str
+    preview: object = None      # spec -> data for an ObjectView / MeshView (None: no "Objekt" tab)
+    preview_kind: str = ""      # "loops" (2D outlines) or "mesh" (triangles)
 
     def values_from_file(self, text: str, machine: Machine, airfoil_dir: Path) -> dict[str, str]:
         return self.from_text(text)
