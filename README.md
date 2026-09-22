@@ -108,6 +108,9 @@ foamcut slices SPEC.slices  one slab of an STL body: side A = section at the sla
                        start, side B at its end, lofted (smooth stack instead of
                        steps); or prismatic through the middle. Fuselages, big
                        wings from foam slices on spars (GUI page "Scheiben")
+foamcut esp ls|put|start|status|pause|resume|abort
+                       programs held by an ESP32 running ESP3D in front of the
+                       board (docs/esp32.md); --port tcp://host uses its bridge
 foamcut nest LIST.batch     several saved parts stacked in one block, one program
                        (GUI page "Schachteln"; pairs: mirror-image panel nested
                        thin-over-thick; wire travels behind the block face)

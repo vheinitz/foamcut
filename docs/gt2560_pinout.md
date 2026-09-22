@@ -30,6 +30,10 @@ The four switches (normally closed, between S and GND, all at the negative end
 of their axis) were wired to the X and Y connector pairs on 2026-09-18 and the
 pin map follows that: every limit input sits on PORTA.
 
+**EXP1 pins 1/2 are D18/D19 = TX1/RX1 (UART1).** That is where an ESP32
+running ESP3D talks to grbl when the firmware is built with `SERIAL=esp`,
+see `docs/esp32.md`.
+
 The E1 slot is free. Keep a spare A4988 in it: when one driver dies you can
 move a motor over and change four lines instead of waiting for a delivery.
 

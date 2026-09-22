@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>foamcut Programme</title>
+<!--
+  Programmseite fuer den ESP32 mit ESP3D: liegt als /foamcut.html im Flash
+  des ESP (ESP3D-WebUI: Dateien -> hochladen) und wird unter
+  http://foamcut.local/foamcut.html geoeffnet. Reines HTML+JS, keine
+  Firmware, keine externen Quellen. Liest die .nc-Dateien im Flash, zeigt je
+  Programm die Kopfzeile "; foamcut-job ..." (Block, Lage, Tisch, Laufzeit)
+  und startet/pausiert/stoppt ueber die ESP3D-Kommandos [ESP700]/[ESP701].
+  Geschrieben gegen die ESP3D-3.x-Dokumentation - was am Geraet abweicht,
+  steht in docs/esp32.md unter "Beim ersten Kontakt pruefen".
+-->
+<style>
+  :root { --fg:#222; --bg:#fafafa; --line:#ddd; --ok:#1a9641; --warn:#b06000; --err:#b00; --acc:#1f5fbf; }
+  body { font-family: system-ui, sans-serif; color: var(--fg); background: var(--bg); margin: 0; padding: 12px 16px; }
+  h1 { font-size: 1.25rem; margin: 0 0 8px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  button { font: inherit; padding: 8px 14px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+  button.primary { background: var(--acc); color: #fff; border-color: var(--acc); }
+  button.danger { color: var(--err); font-weight: bold; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { padding: 8px 10px; border-radius: 6px; background: #eee; min-width: 200px; }
+  #status.run { background: #e3f2e6; } #status.err { background: #ffd9d9; }
+  progress { width: 100%; height: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #f0f0f0; font-weight: 600; }
+  td.num { font-family: ui-monospace, monospace; white-space: nowrap; }
+  tr.sel { background: #eaf1fb; }
+  .hint { color: #666; font-size: .85rem; }
+  @media (max-width: 700px) { .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<h1>foamcut – Programme im ESP</h1>
+<div class="bar">
+  <button id="reload">Liste neu laden</button>
+  <button id="start" class="primary" disabled>Start</button>
+  <button id="pause" disabled>Pause</button>
+  <button id="resume" disabled>Weiter</button>
+  <button id="abort" class="danger" disabled>Abbruch</button>
+  <div id="status">…</div>
+</div>
+<progress id="prog" value="0" max="1"></progress>
+<table id="list">
+  <thead><tr>
+    <th>Programm</th><th>Block L×H×B [mm]</th><th>Rückseite X</th><th>Tisch Y</th>
+    <th class="hide-sm">Wurzel</th><th>Zeit</th><th class="hide-sm">Schlittenweg</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+<p class="hint">Block = Mindestblock (Länge × Höhe × Breite); Rückseite X = wo der Draht eintaucht;
+Tisch Y = Tischoberkante über Draht-Null; Wurzel = Turm mit dem festen Draht. Vor dem Start:
+Referenzfahrt erledigt, Block liegt wie angegeben, Draht heiß genug (Schieber in ESP3D setzen,
+Programme mit S1 nehmen sonst 0,4 %). Hochladen über die ESP3D-Oberfläche (Dateien) oder
+<code>foamcut esp put DATEI.nc</code>.</p>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  let jobs = [];
+  let selected = null;
+  let running = false;
+
+  // ESP3D answers are data from the device - render as text, never as HTML.
+  function txt(s) { return document.createTextNode(s == null ? "" : String(s)); }
+  function cell(s, cls) { const td = document.createElement("td"); if (cls) td.className = cls; td.appendChild(txt(s)); return td; }
+
+  async function get(path) {
+    const r = await fetch(path, { cache: "no-store" });
+    if (!r.ok) throw new Error(path + ": HTTP " + r.status);
+    return r.text();
+  }
+  function command(cmd) { return get("/command?cmd=" + encodeURIComponent(cmd)); }
+
+  function parseJob(name, text) {
+    const job = { name, title: "", block: "", x: "", y: "", root: "", time: "", travel: "" };
+    for (const line of text.split("\n").slice(0, 12)) {
+      if (line.startsWith("; foamcut-job ")) {
+        for (const tok of line.slice(14).trim().split(/\s+/)) {
+          const i = tok.indexOf("=");
+          if (i > 0) { const k = tok.slice(0, i); if (k in job) job[k] = tok.slice(i + 1); }
+        }
+      } else if (line.startsWith("; foamcut") && !job.title) {
+        job.title = line.slice(2).trim();
+      }
+    }
+    return job;
+  }
+
+  async function loadList() {
+    setStatus("lade Liste …", "");
+    let data;
+    try {
+      data = JSON.parse(await get("/files?path=/"));
+    } catch (e) { setStatus("Dateiliste: " + e.message, "err"); return; }
+    const files = (data.files || (data.data && data.data.files) || []).filter(f => /\.(nc|gco|gcode)$/i.test(f.name));
+    jobs = [];
+    for (const f of files) {
+      try { jobs.push(parseJob(f.name, await get("/" + encodeURIComponent(f.name)))); }
+      catch (e) { jobs.push({ name: f.name, title: "(" + e.message + ")" }); }
+    }
+    render();
+    setStatus(jobs.length + " Programm(e)", "");
+  }
+
+  function render() {
+    const tb = $("list").querySelector("tbody");
+    tb.textContent = "";
+    for (const j of jobs) {
+      const tr = document.createElement("tr");
+      const name = cell(j.name); const t = document.createElement("div"); t.className = "hint"; t.appendChild(txt(j.title)); name.appendChild(t);
+      tr.appendChild(name);
+      tr.appendChild(cell(j.block || "–", "num"));
+      tr.appendChild(cell(j.x || "–", "num"));
+      tr.appendChild(cell(j.y || "–", "num"));
+      const w = cell(j.root || "–", "num hide-sm"); tr.appendChild(w);
+      tr.appendChild(cell(j.time || "–", "num"));
+      const tv = cell(j.travel || "–", "num hide-sm"); tr.appendChild(tv);
+      tr.addEventListener("click", () => { selected = j.name; render(); updateButtons(); });
+      if (selected === j.name) tr.className = "sel";
+      tb.appendChild(tr);
+    }
+  }
+
+  function setStatus(text, cls) { const s = $("status"); s.textContent = text; s.className = cls || ""; }
+  function updateButtons() {
+    $("start").disabled = running || !selected;
+    $("pause").disabled = !running; $("resume").disabled = !running; $("abort").disabled = !running;
+  }
+
+  async function poll() {
+    try {
+      const raw = await command("[ESP701]json=yes");
+      const m = raw.match(/\{[\s\S]*\}/);
+      const d = m ? JSON.parse(m[0]) : {};
+      const st = d.data || d;
+      const total = parseFloat(st.total || 0), done = parseFloat(st.processed || 0);
+      running = /process|pause/i.test(st.status || "");
+      if (running) {
+        $("prog").max = total || 1; $("prog").value = done;
+        setStatus((st.status || "") + "  " + (st.name || "") + (total ? "  " + Math.round(100 * done / total) + " %" : ""), "run");
+      } else if (st.status) {
+        setStatus("bereit (" + st.status + ")", "");
+        $("prog").value = 0;
+      }
+    } catch (e) { setStatus("ESP3D antwortet nicht: " + e.message, "err"); }
+    updateButtons();
+  }
+
+  $("reload").addEventListener("click", loadList);
+  $("start").addEventListener("click", async () => {
+    if (!selected) return;
+    const j = jobs.find(x => x.name === selected) || {};
+    if (!confirm("Starten: " + selected + "\nBlock " + (j.block || "?") + " mm, Rückseite X=" + (j.x || "?") +
+                 ", Tisch Y=" + (j.y || "?") + "\nReferenzfahrt gemacht, Block liegt, Draht heiß?")) return;
+    try { setStatus(await command("[ESP700]/" + selected), "run"); } catch (e) { setStatus(e.message, "err"); }
+    setTimeout(poll, 500);
+  });
+  for (const [id, action] of [["pause", "PAUSE"], ["resume", "RESUME"], ["abort", "ABORT"]]) {
+    $(id).addEventListener("click", async () => {
+      if (action === "ABORT" && !confirm("Programm abbrechen? Der Draht bleibt, wo er ist.")) return;
+      try { await command("[ESP701]action=" + action); } catch (e) { setStatus(e.message, "err"); }
+      setTimeout(poll, 300);
+    });
+  }
+  loadList().then(poll);
+  setInterval(poll, 2000);
+})();
+</script>
+</body>
+</html>
