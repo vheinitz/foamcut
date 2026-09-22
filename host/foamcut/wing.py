@@ -516,9 +516,12 @@ def loft(spec, root: list[Point], tip: list[Point], machine: Machine, mirrored: 
         path.notes.append("Block liegt ausserhalb der Tuerme!")
     for label, pts in (("wurzelseitige Blockflaeche", path.faces[0][1]),
                        ("endseitige Blockflaeche", path.faces[1][1])):
-        ys = [p[1] for p in pts]
-        xs = [p[0] for p in pts]
-        if min(ys) < by or max(ys) > by + bh or min(xs) < bx or max(xs) > bx + bl:
+        # points behind the block face are travel in the air (contours, slices
+        # leave and return there), not foam that would need a bigger block
+        inside = [p for p in pts if p[0] >= bx - 1e-6]
+        ys = [p[1] for p in inside]
+        xs = [p[0] for p in inside]
+        if inside and (min(ys) < by - 1e-6 or max(ys) > by + bh + 1e-6 or max(xs) > bx + bl + 1e-6):
             path.notes.append(f"Profil ragt aus dem Block ({label})")
     return path
 

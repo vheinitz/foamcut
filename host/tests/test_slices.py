@@ -245,3 +245,12 @@ def test_pieces_on_one_board_never_cross_each_other():
     # either lies on one outline (cutting) or its midpoint is outside all placed outlines
     placed = [q for q in b.root]
     assert len(placed) > 60
+
+
+def test_travel_behind_the_face_does_not_count_as_profile_outside_the_block():
+    """The chain leaves and re-enters behind the block face (air); that must
+    not trigger 'Profil ragt aus dem Block', which is about foam."""
+    p = sl.build_path(spec(index="1", thickness=10.0, loft=False, root_gap=0.0, block_x=10.0, table_y=0.0, block_w=20.0),
+                      machine())
+    assert min(q[0] for q in p.root) < 10.0                      # the exit point lies behind the face
+    assert not any("ragt" in n for n in p.notes)
