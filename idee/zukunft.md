@@ -148,6 +148,48 @@ Einschätzung (Claude, 2026-09-23):
   Holmnut (oben/unten, Körperkoordinaten) und Haltesteg (`tab`, Kontur und
   prismatische Scheibe) ebenfalls drin.
 
+## Drahttemperatur messen und regeln
+Idee vom 2026-09-23 (Valentin): „die Temperatur zu messen und zu regeln.
+Wäre es machbar? Wie bringe ich T-Sensor an dem Draht an?“
+
+Einschätzung (Claude, 2026-09-23):
+- **Kein Sensor am Draht.** Ein Thermoelement oder NTC am Draht hätte Masse
+  und Zug am 0,3-mm-Draht, liegt auf Drahtpotential (PWM in den ADC), wandert
+  durch den Schaum und misst ohnehin nur seine Kontaktstelle. IR-Sensor
+  (MLX90614) scheidet aus, weil der Messfleck bei 5 cm rund 1 cm groß ist und
+  der dünne Draht darin untergeht – gemessen wird der Hintergrund.
+- **Der Draht ist sein eigener Sensor:** R = U/I, und R steigt mit der
+  Temperatur. Haken: NiCr 80/20 hat absichtlich einen winzigen
+  Temperaturkoeffizienten, α ≈ 1e-4/K → +250 K bringen nur +2,5 % Widerstand.
+  Mit einem 16-bit-Strom-/Spannungsmesser (INA226 + Shunt 0,05 Ω) sind das
+  noch ~20 K Auflösung: für eine Regelung genug, für eine Temperaturanzeige
+  in °C zu wenig. **Edelstahldraht (V2A, ~10 Ω/m) hätte α ≈ 1e-3/K**, also
+  zehnmal mehr Signal – wer ernsthaft regeln will, wechselt das Material.
+- **Regelziel:** nicht Temperatur, sondern (1) konstante Leistung U·I statt
+  konstanter PWM – gleicht Netzteil- und Spannungsschwankungen aus; (2)
+  konstanter Widerstand = konstante Drahttemperatur (Prinzip der
+  Hitzdraht-Anemometrie, CTA). Stufe 2 gleicht genau das aus, was draußen
+  stört: Kühlung durch Wind, Kälte und durch den Schaum selbst.
+- **Wo anschließen:** nicht am Draht, sondern in der Zuleitung – Shunt in
+  Reihe, INA226 misst Drahtspannung und Strom. Am GT2560 liegt I2C auf
+  EXP1 Pin 4/6 (D20 SDA, D21 SCL), aber grbl liest es nicht; die drei
+  Thermistoreingänge (A8/A9/A10, TEMP_0/1/BED) sind frei, aber ebenfalls für
+  grbl unsichtbar – nur mit Firmware-Umbau nutzbar (für die
+  *Umgebungs*temperatur ein NTC dort wäre die einfachste Variante).
+- **Eleganteste Bauform: ein eigenes kleines Drahtregler-Modul** (ESP32-C3
+  oder Arduino Nano, MOSFET, Shunt, INA226) zwischen Netzteil und Draht. Es
+  liest **den PWM-Tastgrad von D3 als Sollwert** und regelt die tatsächliche
+  Leistung bzw. den Widerstand darauf. Dann ändert sich an foamcut, grbl und
+  ESP3D *nichts*: `M3 S…` bleibt die Schnittstelle, nur die Bedeutung wird
+  von „Tastgrad“ zu „Sollwert“. Materialkosten ~20 €.
+- **Sicherheit:** Regler braucht Strombegrenzung, Watchdog (PWM weg → aus),
+  Drahtbruch-Erkennung (I = 0 bei P > 0) und eine Obergrenze, sonst glüht der
+  Draht bei einem Regelfehler durch; bei 24 V sind an 10 Ω 58 W möglich.
+- Empfehlung: Stufe 1 (konstante Leistung) bringt schon den größten Teil und
+  ist in einem Abend gebaut; Stufe 2 lohnt sich, wenn die Maschine wirklich
+  draußen steht. Zusammen mit dem geschwindigkeitsabhängigen Kerf (oben) wäre
+  das die Kombination, die reproduzierbare Schnitte ergibt.
+
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.
 - Winde mit Drehzahlregelung für reproduzierbare Rampenstarts.
