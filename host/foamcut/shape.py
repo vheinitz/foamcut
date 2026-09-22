@@ -13,10 +13,13 @@ lives in wing.loft(); the text format mirrors .wing files.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import airfoil as af
+from . import geom
+from . import mesh
 from .machine import Machine
 from .wing import (Model, WingError, WingPath, _template, emit_gcode, field_catalogue, from_text, inverted, loft,
                    to_text)
@@ -71,6 +74,18 @@ FIELDS = [
     ]),
     _side("a", "Seite A (Wurzel)", dx=False),
     _side("b", "Seite B (Ende)", dx=True),
+    ("holm", "Holme", [
+        ("holm1", "Holm 1", "", "",
+         "Aussparung fuer eine Holzleiste: '<Lage>% <b>x<h>'. Lage = Anteil des Umfangs ab dem Einschnitt "
+         "(dort, wo der Draht eintaucht, hinten), im Uhrzeigersinn der Kontur; 25 % ist also ein Viertel "
+         "herum. b x h in mm, das Mass der Leiste; die Nut steht senkrecht auf der Kontur an dieser Stelle. "
+         "Beispiel: 25% 6x4. Das Haekchen schaltet den Holm ein und aus, der Wert bleibt stehen.", "opttext"),
+        ("holm2", "Holm 2", "", "", "Zweiter Holm, gleiche Schreibweise. Leer oder Haekchen weg = keiner.", "opttext"),
+        ("holm3", "Holm 3", "", "", "Dritter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
+        ("holm4", "Holm 4", "", "", "Vierter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
+        ("holm5", "Holm 5", "", "", "Fuenfter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
+        ("holm6", "Holm 6", "", "", "Sechster Holm. Leer oder Haekchen weg = keiner.", "opttext"),
+    ]),
     ("lage", "Lage im Schneider", [
         ("root_gap", "Seite A ab Turm", "mm", "150",
          "Abstand der Seite A des Blocks vom Turm mit dem festen Draht, entlang des Drahts.", "num"),
@@ -98,6 +113,7 @@ TEMPLATE = _template(FIELDS, ("; Freie Form fuer den Schaumschneider: ein Quersc
 _CHOICES = {key: kind.split(":", 1)[1].split("|")
             for key, (_, _, _, _, kind) in field_catalogue(FIELDS).items() if kind.startswith("choice:")}
 _INTS = {"points"}
+_TEXT = {f"holm{k}" for k in range(1, 7)}
 _MACHINE_KEYS = {"kerf", "feed", "wire", "warmup"}     # accepted in old files, ignored
 _REQUIRED = {"panel", "root_gap", "block_x", "table_y"}
 
@@ -120,6 +136,12 @@ class Side:
 class ShapeSpec:
     panel: float = 200.0
     points: int = 72
+    holm1: str = ""
+    holm2: str = ""
+    holm3: str = ""
+    holm4: str = ""
+    holm5: str = ""
+    holm6: str = ""
     a: Side = None
     b: Side = None
     root_gap: float = 150.0
@@ -164,6 +186,8 @@ class ShapeSpec:
                 if value.lower() not in _CHOICES[key]:
                     raise WingError(f"Zeile {n}: {key} muss eines von {', '.join(_CHOICES[key])} sein")
                 setattr(target, attr, value.lower())
+            elif key in _TEXT:
+                setattr(target, attr, value)
             else:
                 try:
                     num = float(value.replace(",", "."))
@@ -279,9 +303,87 @@ def side_path(side: Side, n: int, kerf: float) -> list[Point]:
     return outer + hole + [outer[0]]
 
 
+_SPAR_RE = re.compile(r"^\s*([\d.,]+)\s*%?\s+([\d.,]+)\s*[xX*]\s*([\d.,]+)\s*$")
+
+
+def parse_spars(spec: "ShapeSpec") -> list[tuple[float, float, float]]:
+    """The filled-in spar lines as (fraction of the perimeter, width, height).
+    Lines switched off with 'aus' and empty ones are ignored."""
+    out = []
+    for k in range(1, 7):
+        text = (getattr(spec, f"holm{k}", "") or "").strip()
+        if not text or text.lower().startswith(("aus", "off", "nein")):
+            continue
+        m = _SPAR_RE.match(text)
+        if not m:
+            raise WingError(f"Holm {k} {text!r}: erwartet '<Lage>% <b>x<h>', z. B. 25% 6x4")
+        num = lambda t: float(t.replace(",", "."))
+        frac, w, h = num(m.group(1)) / 100.0, num(m.group(2)), num(m.group(3))
+        if w <= 0 or h <= 0:
+            raise WingError(f"Holm {k}: Breite und Hoehe muessen > 0 sein")
+        out.append((frac, w, h))
+    return out
+
+
+def _with_spars(outer: list[Point], spars, kerf: float) -> tuple[list[Point], list[int]]:
+    """Cut every spar slot into one side's outline. The position is a share of
+    the perimeter from the entry point, so both sides match up."""
+    keys: list[int] = []
+    before = list(outer)
+    for frac, w, h in sorted(spars, key=lambda s: -s[0]):
+        try:
+            # the wire melts `kerf` more than it travels: a w wide slot needs
+            # a path that is kerf narrower
+            outer, _ = geom.notch_at(outer, frac, max(w - kerf, 0.2), h)
+        except ValueError as e:
+            raise WingError(f"Holm bei {frac * 100:g} %: {e}") from None
+    for i, q in enumerate(outer):
+        if all(abs(q[0] - r[0]) > 1e-9 or abs(q[1] - r[1]) > 1e-9 for r in before):
+            keys.append(i)
+    return outer, keys
+
+
+def _sides(spec: ShapeSpec, machine: Machine, kerf: float) -> tuple[list[Point], list[Point], list[list[Point]], list[list[Point]]]:
+    """Both sides of the part: outline (with the spar slots) and hole loops."""
+    n = spec.points + 1
+    a_all = side_path(spec.a, spec.points, kerf)
+    b_all = [(x + spec.b.dx, y + spec.b.dy) for x, y in side_path(spec.b, spec.points, kerf)]
+    a_out, b_out = a_all[:n], b_all[:n]
+    a_hole = [a_all[n:2 * n]] if spec.a.hole != "keine" else []
+    b_hole = [b_all[n:2 * n]] if spec.b.hole != "keine" else []
+    spars = parse_spars(spec)
+    if spars:
+        a_cut, ka = _with_spars(a_out[:-1], spars, kerf)
+        b_cut, kb = _with_spars(b_out[:-1], spars, kerf)
+        if len(ka) != len(kb):
+            raise WingError("Holmnut faellt auf den Seiten verschieden aus - Lage oder Breite aendern")
+        total = max(len(a_cut), len(b_cut))
+        kr = sorted({0} | set(ka)); kt = sorted({0} | set(kb))
+        counts = geom.segment_counts(a_cut, kr, total)
+        a_out = geom.resample_keyed(a_cut, kr, counts)
+        b_out = geom.resample_keyed(b_cut, kt, counts)
+    return a_out, b_out, [h[:-1] for h in a_hole], [h[:-1] for h in b_hole]
+
+
+def to_stl(spec: ShapeSpec, machine: Machine, airfoil_dir: Path | None = None) -> bytes:
+    """The shape as a body: x forward, y up, z from side A (0) to side B."""
+    a, b, ha, hb = _sides(spec, machine, 0.0)
+    if len(ha) != len(hb):
+        raise WingError("Loch: beide Seiten brauchen ein Loch oder keines")
+    tris = mesh.loft_body(a[:-1], b[:-1], spec.panel, ha, hb)
+    return mesh.to_stl(tris, f"foamcut shape {spec.a.kind} {spec.a.w:g}x{spec.a.h:g} -> "
+                             f"{spec.b.kind} {spec.b.w:g}x{spec.b.h:g}, Laenge {spec.panel:g} mm")
+
+
+def stl_name(spec: ShapeSpec) -> str:
+    return shape_name(spec)[:-3] + ".stl"
+
+
 def build_path(spec: ShapeSpec, machine: Machine) -> WingPath:
-    a = side_path(spec.a, spec.points, machine.kerf_mm)
-    b = [(x + spec.b.dx, y + spec.b.dy) for x, y in side_path(spec.b, spec.points, machine.kerf_mm)]
+    a_out, b_out, a_hole, b_hole = _sides(spec, machine, machine.kerf_mm)
+    # the wire walks the outline, then through the slit into the hole and back
+    a = list(a_out) + ([q for q in a_hole[0]] + [a_hole[0][0], a_out[0]] if a_hole else [])
+    b = list(b_out) + ([q for q in b_hole[0]] + [b_hole[0][0], b_out[0]] if b_hole else [])
     rear = min(min(x for x, _ in a), min(x for x, _ in b))
     shift = spec.block_x + spec.lead - rear             # rearmost point sits `lead` past the block face
     a = [(x + shift, y) for x, y in a]
@@ -289,9 +391,12 @@ def build_path(spec: ShapeSpec, machine: Machine) -> WingPath:
     path = loft(spec, a, b, machine)
     desc = lambda s: f"{s.kind} {s.w:g}x{s.h:g}" + (f" Loch {s.hole} {s.hole_w:g}x{s.hole_h:g}" if s.hole != "keine" else "")
     path.notes.insert(1, f"Form: A {desc(spec.a)} -> B {desc(spec.b)}, Laenge {spec.panel:g}")
+    spars = parse_spars(spec)
+    if spars:
+        path.notes.append("Holmnuten: " + ", ".join(f"{f * 100:g}% {w:g}x{h:g}" for f, w, h in spars))
     # sides of different size: the wire lines converge and cross somewhere
     # beyond the smaller side; at a tower past that point the contour is inverted
-    n = spec.points + 1
+    n = min(spec.points + 1, len(path.root))
     for tower, pts in ((1, path.tower1), (2, path.tower2)):
         if inverted(path.root[:n], pts[:n]):
             path.notes.append(f"Drahtlinien kreuzen sich vor Turm {tower} - dort darf kein Schaum liegen")
@@ -318,4 +423,4 @@ def shape_from_text(text: str) -> dict[str, str]:
 
 
 SHAPE_MODEL = Model("Formen", "shape", FIELDS, ShapeSpec.parse, generate, shape_name, shape_to_text,
-                    shape_from_text, TEMPLATE, "shape (*.shape);;alle (*)")
+                    shape_from_text, TEMPLATE, "shape (*.shape);;alle (*)", stl=to_stl, stl_name=stl_name)

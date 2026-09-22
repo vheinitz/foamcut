@@ -843,6 +843,7 @@ def build_parser() -> argparse.ArgumentParser:
     c = sub.add_parser("shape", help="free shape (disc/ring, one cross-section per side) -> one-pass G-code")
     c.add_argument("spec", nargs="?", help=".shape text file (foamcut shape --template)")
     c.add_argument("-o", "--out")
+    c.add_argument("--stl", nargs="?", const="", help="also write the shape as a body (STL)")
     c.add_argument("--airfoils", default="airfoil", help=argparse.SUPPRESS)
     c.add_argument("--template", action="store_true", help="print a spec template")
     c.set_defaults(func=cmd_shape)

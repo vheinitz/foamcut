@@ -104,7 +104,7 @@ foamcut contour SPEC.contour  outlines of an SVG (letters, silhouettes, sketches
                        Inkscape) cut prismatically, X=U / Y=V: kerf, slits to holes,
                        several pieces routed around each other (GUI page "Kontur";
                        foamcut contour --template)
-foamcut wing SPEC.wing --stl [FILE]   also write the panel as a body (STL),
+foamcut wing|shape SPEC --stl [FILE]  also write the part as a body (STL),
                        spar slots and holes included, ready to be sliced into ribs
 foamcut slices SPEC.slices  one slab of an STL body: side A = section at the slab's
                        start, side B at its end, lofted (smooth stack instead of

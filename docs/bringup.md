@@ -75,7 +75,9 @@ Körper aus, mit Nuten und Löchern: daraus lassen sich später auf der Seite
 *Scheiben* Rippen schneiden und mit Holzleisten zu einem größeren Flügel
 zusammensetzen. Innenlöcher schneidet der Draht am Flügel selbst nicht – er
 käme nicht hinein, ohne ihn aufzuschlitzen), **Formen** (freie Querschnitte je Seite, Scheibe
-oder Ring – Rumpfsegmente), **Kontur** (SVG-Zeichnung aus Inkscape als
+oder Ring – Rumpfsegmente; Schritt *Holme* wie beim Flügel, die Lage aber als
+Anteil des Umfangs ab dem Einschnitt: „25% 6x4“ sitzt ein Viertel herum.
+„STL speichern…“ gibt auch hier den Körper aus), **Kontur** (SVG-Zeichnung aus Inkscape als
 Parallelschnitt X=U/Y=V: Buchstaben, Silhouetten; Löcher über einen Schlitz
 nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
 **Scheiben** (STL-Körper in Scheiben einer Dicke; Scheiben „2,3,4“, „1-5“

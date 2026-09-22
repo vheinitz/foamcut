@@ -100,3 +100,55 @@ def test_crossing_wire_lines_are_reported_even_though_orientation_survives():
     assert any("kreuzen sich vor Turm 1" in n for n in p.notes)
     same = sh.build_path(spec(a_kind="kreis", a_w=60.0, b_kind="kreis", b_w=60.0), machine())
     assert not any("kreuzen" in n for n in same.notes)
+
+
+# --------------------------------------------------------------- Holme ----
+def test_shape_spars_are_cut_at_a_share_of_the_perimeter():
+    from foamcut import geom
+    s = spec(); s.holm1 = "25% 6x4"; s.holm3 = "60% 8x5"
+    p = sh.build_path(s, machine(kerf=0.0))
+    assert len(p.root) == len(p.tip)                       # both sides still pair point for point
+    assert any(n.startswith("Holmnuten: 25% 6x4, 60% 8x5") for n in p.notes)
+    plain = sh.build_path(spec(), machine(kerf=0.0))
+    assert abs(geom.signed_area(p.root)) < abs(geom.signed_area(plain.root)) - 6 * 4 - 8 * 5 + 2
+    s.holm1 = "aus 25% 6x4"
+    assert [round(f * 100) for f, _, _ in sh.parse_spars(s)] == [60]      # switched off, value kept
+    s.holm1 = "Unsinn"
+    with pytest.raises(sh.WingError, match="Holm 1"):
+        sh.parse_spars(s)
+
+
+def test_shape_slot_path_is_kerf_narrower_so_the_slot_comes_out_nominal():
+    from foamcut import geom
+    s = spec()
+    side = sh.side_path(s.a, s.points, 0.0)[:s.points]
+    for kerf, want in ((0.0, 6.0), (2.0, 4.0)):            # the melted slot is kerf wider than the path
+        cut, _ = sh._with_spars(list(side), [(0.25, 6.0, 4.0)], kerf)
+        direct, keys = geom.notch_at(list(side), 0.25, want, 4.0)
+        assert cut == direct                               # the path is cut kerf narrower
+        mouth_a, floor_a, floor_b, mouth_b = (direct[k] for k in keys)
+        assert math.dist(floor_a, floor_b) == pytest.approx(want, abs=1e-6)
+        assert math.dist(mouth_a, floor_a) == pytest.approx(4.0, abs=1e-6)     # depth stays
+
+
+def test_shape_exports_a_watertight_body_with_hole_and_slots():
+    from collections import Counter
+    from foamcut import geom, slices as sl
+    import pathlib, tempfile
+    s = spec(a_kind="kreis", b_kind="kreis", a_w=60.0, b_w=60.0, a_hole="kreis", b_hole="kreis",
+             a_hole_w=24.0, b_hole_w=24.0, panel=50.0)
+    s.holm1 = "25% 6x4"
+    data = sh.to_stl(s, machine())
+    assert data[:7] == b"foamcut"
+    with tempfile.TemporaryDirectory() as d:
+        f = pathlib.Path(d) / "s.stl"; f.write_bytes(data)
+        tris = sl.load_stl(f)
+    edges = Counter()
+    for a, b, c in tris:
+        for u, v in ((a, b), (b, c), (c, a)):
+            edges[tuple(sorted((tuple(round(x, 4) for x in u), tuple(round(x, 4) for x in v))))] += 1
+    assert all(v == 2 for v in edges.values())
+    loops = sl.section(tris, 2, 25.0, 0, 1)
+    assert len(loops) == 2                                   # outline and hole
+    hole = min(loops, key=lambda l: abs(geom.signed_area(l)))
+    assert abs(geom.signed_area(hole)) == pytest.approx(math.pi * 12 ** 2, rel=0.02)
