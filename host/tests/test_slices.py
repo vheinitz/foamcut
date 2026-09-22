@@ -101,12 +101,13 @@ def test_axes_can_be_chosen_and_mirrored(tmp_path):
     p = sl.build_path(s, machine())
     xs = [q[0] for q in p.root]; ys = [q[1] for q in p.root]
     # slicing along x: the section is y (20) forward by z (100) up
-    assert max(xs) - (s.block_x + s.lead) == pytest.approx(20.0, abs=1e-6)
-    body = [q for q in p.root if q[0] >= s.block_x + s.lead - 1e-6]      # the piece itself, not the port/travel
+    from foamcut.contour import clearance
+    assert max(xs) - (s.block_x + s.lead + clearance(0.0)) == pytest.approx(20.0, abs=1e-6)   # hull sits at lead
+    body = [q for q in p.root if q[0] >= s.block_x + s.lead + clearance(0.0) - 1e-6]  # the piece, not port/travel
     assert max(q[1] for q in body) - min(q[1] for q in body) == pytest.approx(100.0, abs=1e-6)
     m = sl.build_path(spec(stl=str(tmp_path / "box.stl"), thickness=100.0, index="1", axis="x", up="z", loft=False,
                            mirror=True, block_h=140.0), machine())
-    assert max(q[0] for q in m.root) - (s.block_x + s.lead) == pytest.approx(20.0, abs=1e-6)
+    assert max(q[0] for q in m.root) - (s.block_x + s.lead + clearance(0.0)) == pytest.approx(20.0, abs=1e-6)
 
 
 def test_extreme_taper_is_flagged():
@@ -195,11 +196,12 @@ def test_travel_between_pieces_never_crosses_a_piece():
     pts = b.path.root
     # the pieces: rebuild their placed outlines (kerf paths) from the parts
     tris, zmin, zmax, count = sl._body(spec())
-    slabs = [sl._slab(spec(loft=False), machine(kerf=2.0), tris, zmin, zmax, count, n) for n in (2, 3, 4)]
+    items = [{deg: sl._slab(spec(loft=False), machine(kerf=2.0), tris, zmin, zmax, count, n, deg)
+              for deg in (0, 90, 180, 270)} for n in (2, 3, 4)]
     x0 = spec().block_x + spec().lead
     placed = []
-    for s, dx, dy in sl.pack(slabs, *sl._usable(spec(), machine()), 8.0)[0]:      # 2 * clearance(2) + 1
-        placed += s.shifted(x0 + dx - s.origin[0], dy - s.origin[1])
+    for pl in sl.pack(items, *sl._usable(spec(), machine()))[0]:
+        placed += [sl.Part([(x + x0, y) for x, y in p.a], p.b, p.hull, p.label) for p in pl.parts]
     outlines = [p.a for p in placed]
     r6 = lambda q: (round(q[0], 6), round(q[1], 6))
     piece_pts = {r6(q) for o in outlines for q in o}

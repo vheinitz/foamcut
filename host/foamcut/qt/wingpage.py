@@ -84,6 +84,12 @@ class DesignPage(QWidget):
                     (w.ja if value == "ja" else w.nein).setChecked(True)
                     h.addWidget(w.nein); h.addWidget(w.ja); h.addStretch()
                     w.ja.toggled.connect(self.schedule)
+                elif kind == "text":
+                    # free text such as a list of slices: recompute on Enter / leaving the
+                    # field, not on every keystroke (each one would repack the board)
+                    w = QLineEdit(str(value)); w.setMaximumWidth(140)
+                    w.editingFinished.connect(self.schedule)
+                    w.setToolTip("Eingabe mit Enter bestaetigen")
                 else:
                     w = QLineEdit(str(value)); w.setMaximumWidth(90)
                     w.setAlignment(Qt.AlignmentFlag.AlignRight)

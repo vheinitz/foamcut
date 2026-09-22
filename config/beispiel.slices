@@ -8,7 +8,7 @@ up = y
 mirror = nein
 thickness = 40
 index = 2,3,4
-gap = 6
+gap = 0
 loft = ja
 points = 120
 

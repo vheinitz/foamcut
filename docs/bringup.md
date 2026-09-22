@@ -71,8 +71,10 @@ Parallelschnitt X=U/Y=V: Buchstaben, Silhouetten; Löcher über einen Schlitz
 nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
 **Scheiben** (STL-Körper in Scheiben einer Dicke; Scheiben „2,3,4“, „1-5“
 oder „alle“ werden nebeneinander auf einer Schaumplatte der Scheibendicke
-angeordnet (Platte Länge/Höhe, sonst Verfahrweg), der Draht fährt zwischen
-ihnen um die schon geschnittenen herum; passen nicht alle, gibt es **ein
+angeordnet (Platte Länge/Höhe, sonst Verfahrweg): Umrisse statt Rechtecke,
+Vierteldrehungen erlaubt, kleinstes umschließendes Rechteck, Abstand zum
+Fahrweg 2 × Schnittbreite; Scheibenliste mit Enter bestätigen; der Draht
+fährt zwischen ihnen um die schon geschnittenen herum; passen nicht alle, gibt es **ein
 Programm je Platte** (`…_platte1.nc`, `_platte2.nc`): die Programmseite zeigt
 nach dem Ende von Platte 1, welche Platte einzulegen ist, und lädt Platte 2
 erst über „Nächste Platte laden…“ – dann wie immer Start; verlaufend zwischen den beiden
