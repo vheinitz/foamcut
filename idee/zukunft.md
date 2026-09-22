@@ -190,6 +190,48 @@ Einschätzung (Claude, 2026-09-23):
   draußen steht. Zusammen mit dem geschwindigkeitsabhängigen Kerf (oben) wäre
   das die Kombination, die reproduzierbare Schnitte ergibt.
 
+### Nachtrag 2026-09-23: echter Fühler an den Thermistoreingängen
+Einwand Valentin: „gt2560 hat doch bereits 3 Eingänge für T-Sensoren … T-Sensor
+würde ich am Draht binden und mit einem gut isolierten Keramik- oder
+Asbestgehäuse umschließen.“ Der Einwand trifft – die Widerstandsmessung ist bei
+NiCr tatsächlich zu grob, ein echter Fühler ist genauer. Bedingungen:
+
+- **Kein Asbest.** In der EU seit 2005 verboten, Bearbeiten und Verbauen ist
+  strafbar und die Fasern sind krebserzeugend. Ersatz mit gleicher Wirkung:
+  Keramikfaser (biolöslich, „Superwool“), Glasfaserschlauch (bis ~550 °C),
+  Glimmerplättchen, Keramik-Perlrohr (Thermoelementperlen).
+- **Der Fühler darf nicht in den Schnitt.** Alles am Draht ist dicker als der
+  Draht und würde durch den Schaum pflügen. Also **außerhalb der Blockbreite**
+  binden, dicht am Turm mit dem festen Draht; er fährt mit dem Draht mit und
+  bleibt in der Luft. Kapsel leicht halten (< 2 g), sonst hängt der Draht
+  durch – das Gewicht am anderen Turm spannt ihn nur.
+- **Fühler:** PT1000 (Dünnschicht, bis 500 °C) passt am besten – die
+  GT2560-Eingänge TEMP_0/1/BED (A8/A9/A10, PORTK Bit 0–2, in unserer grbl-Map
+  frei) haben schon 4,7-kΩ-Pull-ups nach 5 V. PT1000 an diesem Teiler: 0,88 V
+  bei 0 °C, 1,72 V bei 400 °C → am 10-bit-ADC ~2,3 K je Schritt. Der
+  Drucker-NTC (100 kΩ) ist nur bis 300 °C spezifiziert und oben sehr flach;
+  ein Typ-K-Element bräuchte einen Verstärker (AD8495, 5 mV/°C – ebenfalls
+  analog anschließbar) oder SPI (MAX31855, dann kein Thermistoreingang).
+  Zwischen Draht und Fühler ein Glimmerplättchen: der Draht führt PWM.
+- **Was der Fühler misst:** die Temperatur der Kapsel neben dem Turm, nicht
+  die der Schnittstelle. Absolut ist das falsch, als *Regelgröße* aber
+  reproduzierbar; die Zeitkonstante der Kapsel liegt bei Sekunden, was für
+  langsame Störungen (Kälte, Wind, Netzteil) genau reicht.
+- **Kette bis zur Regelung, ohne neue Hardware am Rechner:**
+  1. grbl liest den ADC und hängt ein Feld an den Statusbericht, z. B.
+     `|WT:212.5` (report.c, dort wo `|FS:` entsteht; ~40 Zeilen plus ein
+     `$`-Setting für Fühlertyp und Kalibrierung).
+  2. `parse_status()` im Host nimmt das Feld auf, die Maschinenseite zeigt es.
+  3. Der Host regelt mit den Echtzeitbytes für den Spindel-Override:
+     0x9C/0x9D = ±1 %, 0x9A/0x9B = ±10 %, 0x99 = zurück auf 100 %. Die wirken
+     **mitten im laufenden Programm**, ohne G-Code zu ändern – ein PI-Regler
+     mit ein paar Prozent je Sekunde genügt. `sys.spindle_speed` im Bericht
+     zeigt, was tatsächlich eingestellt ist.
+  Damit bleibt die Architektur wie sie ist: Firmware misst, Host regelt.
+- Aufwand: Fühler + Kapsel ~15 €, Firmware ein Abend, Host ein Abend. Der
+  Weg ist dem Regler-Modul (oben) vorzuziehen, solange der PC mitläuft; ohne
+  PC (ESP32) müsste der Regler in die Firmware wandern.
+
 ## Sonstiges
 - Karton-Prototypen-Bausatz (Lasercutter) parallel zum Schaumschneider.
 - Winde mit Drehzahlregelung für reproduzierbare Rampenstarts.
