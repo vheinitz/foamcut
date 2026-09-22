@@ -74,7 +74,10 @@ oder „alle“ werden nebeneinander auf einer Schaumplatte der Scheibendicke
 angeordnet (Platte Länge/Höhe, sonst Verfahrweg): Umrisse statt Rechtecke,
 Vierteldrehungen erlaubt, kleinstes umschließendes Rechteck, Scheiben
 2 × Schnittbreite + 0,5 mm auseinander; erst wird angeordnet, dann der
-Fahrweg gesucht (1 × Schnittbreite Abstand zu jedem Teil); Scheibenliste mit Enter bestätigen; der Draht
+Fahrweg gesucht (1 × Schnittbreite Abstand zu jedem Teil): die Teile werden in
+einer Kette geschnitten – obere zuerst (ein freies Teil kann fallen), in
+der Reihe hin und in der nächsten zurück, Einstieg an der dem Draht
+nächsten Stelle des Umrisses, kein Rückweg zu einem Einfahrpunkt hinten; Scheibenliste mit Enter bestätigen; der Draht
 fährt zwischen ihnen um die schon geschnittenen herum; passen nicht alle, gibt es **ein
 Programm je Platte** (`…_platte1.nc`, `_platte2.nc`): die Programmseite zeigt
 nach dem Ende von Platte 1, welche Platte einzulegen ist, und lädt Platte 2

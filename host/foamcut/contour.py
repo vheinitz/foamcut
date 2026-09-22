@@ -17,7 +17,7 @@ the drawing is seen from the side of tower 1 as drawn. `mirror` flips it.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import geom
@@ -254,24 +254,37 @@ def _cut_outline(o: Outline, tab: float = 0.0) -> list[Point]:
 
 @dataclass
 class Part:
-    """One piece to cut: its wire path on side A and B (same length, both
-    starting and ending at the piece's rearmost point), and the convex hull
-    of its cut paths (no clearance - packing and routing add their own)."""
+    """One piece to cut: its wire path on side A and B (same length, closed
+    walks starting and ending at the piece's rearmost point), the convex
+    hull of its cut paths (no clearance - packing and routing add their own)
+    and which walk indices sit on the outer loop (entry candidates)."""
     a: list[Point]
     b: list[Point]
     hull: list[Point]
     label: str = ""
+    outer: list[int] = field(default_factory=list)
+
+    @property
+    def closed(self) -> bool:
+        return len(self.a) > 2 and math.dist(self.a[0], self.a[-1]) < 1e-9
+
+    def walks_from(self, idx: int) -> tuple[list[Point], list[Point]]:
+        """The closed walks started at walk index idx (an outer-loop vertex)."""
+        if idx == 0 or not self.closed:
+            return list(self.a), list(self.b)
+        return self.a[idx:] + self.a[1:idx + 1], self.b[idx:] + self.b[1:idx + 1]
 
 
 def part_from_outline(o: Outline, tab: float = 0.0, label: str = "", kerf: float = 0.0) -> Part:
     path = _cut_outline(o, tab)
-    return Part(path, list(path), geom.convex_hull(o.loop), label)
+    verts = {(round(x, 9), round(y, 9)) for x, y in o.loop}
+    outer = [i for i, q in enumerate(path[:-1]) if (round(q[0], 9), round(q[1], 9)) in verts]
+    return Part(path, list(path), geom.convex_hull(o.loop), label, outer)
 
 
 def _port(own: list[Point], rear: Point, others: list[list[Point]]) -> Point:
-    """Where the wire waits before entering / after leaving a piece: the
-    rearmost vertex of its clearance hull that no other piece's hull covers
-    (tightly packed neighbours cover the rear corners; then a side one)."""
+    """A point on the piece's clearance hull, rearmost first, that no other
+    hull covers: where the wire can wait before entering from behind."""
     for q in sorted(own, key=lambda q: (q[0], abs(q[1] - rear[1]))):
         if not any(geom.inside(q, o) for o in others):
             return q
@@ -279,36 +292,94 @@ def _port(own: list[Point], rear: Point, others: list[list[Point]]) -> Point:
                     "Zusatzabstand erhoehen")
 
 
-def route_parts(parts: list[Part], entry: Point, kerf: float = 0.0) -> tuple[list[Point], list[Point], list[int]]:
-    """Cut all parts one after another from the entry point and back to it:
-    nearest piece first, travelling around the others at `clearance(kerf)`.
-    The pieces are placed first (as tight as the packing likes); the travel
-    only has to find a way to each one, between neighbours where there is
-    room and around the group where there is none. Returns the side A path,
-    the side B path (same length: the travel points are shared, only the
-    pieces differ) and the cut order."""
+def cut_order(parts: list[Part], start: Point) -> list[int]:
+    """Top pieces first - a piece cut free may drop, and a piece cut below
+    one that has dropped is off - and within a band of equal height the
+    nearest next, which walks the rows back and forth."""
+    tops = [max(q[1] for q in p.hull) for p in parts]
+    heights = [max(q[1] for q in p.hull) - min(q[1] for q in p.hull) for p in parts]
+    order: list[int] = []
+    pos = start
+    todo = list(range(len(parts)))
+    while todo:
+        top = max(tops[k] for k in todo)
+        band = [k for k in todo if tops[k] >= top - 0.4 * heights[k]]
+        k = min(band, key=lambda k: min(math.dist(pos, parts[k].a[i]) for i in (parts[k].outer or [0])))
+        order.append(k); todo.remove(k)
+        pos = parts[k].a[0]
+    return order
+
+
+def route_parts(parts: list[Part], entry: Point | float, kerf: float = 0.0,
+                order: list[int] | None = None) -> tuple[list[Point], list[Point], list[int], Point]:
+    """Cut all parts in a chain: from the entry point to the first piece,
+    into it at the outer vertex nearest to where the wire is, round, and on
+    from there to the next piece - never back to a port, never through a
+    piece (cut or not: `clearance(kerf)` around every other hull). Ends
+    behind the block face at the height of the last exit; the caller's
+    program returns from there to the entry along the face, in air.
+    `entry` may be just the x of the block face: the entry height is then the
+    rearmost outer vertex of the first piece, so the lead-in is short.
+    Returns side A path, side B path (same length), the cut order and the entry."""
     c = clearance(kerf)
-    obstacles = [geom.grow(p.hull, c) for p in parts]
-    ports = [_port(obstacles[k], parts[k].a[0], obstacles[:k] + obstacles[k + 1:]) for k in range(len(parts))]
+    hulls = [geom.grow(p.hull, c) for p in parts]
+    if not isinstance(entry, tuple):
+        top = max(q[1] for p in parts for q in p.hull)
+        order = order if order is not None else cut_order(parts, (entry, top))
+        first = parts[order[0]]
+        rear = min((first.a[i] for i in (first.outer or [0])), key=lambda q: q[0])
+        entry = (entry, rear[1])
+    order = order if order is not None else cut_order(parts, entry)
     pa: list[Point] = []; pb: list[Point] = []
     pos = entry
-    todo = list(range(len(parts)))
-    order: list[int] = []
-    while todo:
-        k = min(todo, key=lambda k: math.dist(pos, ports[k]))
-        todo.remove(k); order.append(k)
+    prev: int | None = None
+    for k in order:
         part = parts[k]
-        # every hull is an obstacle, the target's too: the wire must not cross
-        # a piece before cutting it any more than after
-        leg = geom.route(pos, ports[k], obstacles)
-        leg = leg[1:] if pa else leg
-        pa.extend(leg); pb.extend(leg)
-        pa.extend(part.a); pb.extend(part.b)
-        pa.append(ports[k]); pb.append(ports[k])
-        pos = ports[k]
-    leg = geom.route(pos, entry, obstacles)
+        others = [h for j, h in enumerate(hulls) if j != k]
+        # leaving the previous piece: first step from its outline out to the
+        # nearest vertex of its clearance hull that no other hull covers
+        head: list[Point] = [pos]
+        if prev is not None:
+            free = [q for q in hulls[prev] if not any(geom.inside(q, h) for h in others if h is not hulls[prev])]
+            for q in sorted(free, key=lambda q: math.dist(pos, q)):
+                if not geom._strict_cross(pos, q, parts[prev].a[:-1]):
+                    head.append(q); break
+            else:
+                raise WingError(f"{parts[prev].label or 'Teil'}: kein freier Weg vom Teil weg - Zusatzabstand erhoehen")
+        cands = sorted(part.outer or [0], key=lambda i: math.dist(head[-1], part.a[i])) if part.closed else [0]
+        leg = None
+        for idx in cands[:12]:
+            target = part.a[idx]
+            try:
+                trial = geom.route(head[-1], target, others)
+            except ValueError:
+                continue
+            # the approach may not cut into the piece we enter
+            if not any(geom._strict_cross(u, v, part.a[:-1]) for u, v in zip(trial, trial[1:])):
+                leg = (head + trial[1:], idx); break
+        if leg is None:                                   # fall back: come in from behind
+            port = _port(hulls[k], part.a[0], others)
+            trial = geom.route(head[-1], port, others)
+            leg = (head + trial[1:] + [part.a[0]], 0)
+        trial, idx = leg
+        wa, wb = part.walks_from(idx)
+        pa.extend(trial[1:] if pa else trial); pb.extend(trial[1:] if pb else trial)
+        skip = 1 if trial[-1] == wa[0] else 0          # same on both sides: the paths stay paired
+        pa.extend(wa[skip:]); pb.extend(wb[skip:])
+        pos = pa[-1]
+        prev = k
+    # out: off the last piece, then back behind the block face at that height
+    exit_pt = (entry[0] - 2.0, pos[1])
+    free = [q for q in hulls[prev] if not any(geom.inside(q, h) for j, h in enumerate(hulls) if j != prev)]
+    for q in sorted(free, key=lambda q: math.dist(pos, q) + abs(q[1] - pos[1])):
+        if not geom._strict_cross(pos, q, parts[prev].a[:-1]):
+            break
+    else:
+        raise WingError("kein freier Weg vom letzten Teil weg - Zusatzabstand erhoehen")
+    exit_pt = (entry[0] - 2.0, q[1])
+    leg = [pos] + geom.route(q, exit_pt, hulls)
     pa.extend(leg[1:]); pb.extend(leg[1:])
-    return pa, pb, order
+    return pa, pb, order, entry
 
 
 def plan(loops: list[list[Point]], kerf: float, entry_x: float, tab: float = 0.0) -> tuple[list[Point], list[str]]:
@@ -316,8 +387,8 @@ def plan(loops: list[list[Point]], kerf: float, entry_x: float, tab: float = 0.0
     rearmost outline) and back to it, in the drawing's coordinates."""
     outlines = classify(loops, kerf)
     parts = [part_from_outline(o, tab, kerf=kerf) for o in outlines]
-    entry = (entry_x, outlines[0].loop[outlines[0].rear][1])
-    path, _, order = route_parts(parts, entry, kerf)
+    path, _, order, entry = route_parts(parts, entry_x, kerf)
+    path = [entry] + path
     notes = [f"{len(outlines)} Teil(e), {sum(len(o.holes) for o in outlines)} Loch/Loecher, "
              f"Reihenfolge von hinten: " + ", ".join(str(k + 1) for k in order)
              + (f"; Haltesteg {tab:g} mm an jeder Kontur (von Hand brechen)" if tab > 0 else "")]

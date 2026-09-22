@@ -482,7 +482,7 @@ class Slab:
 
     def shifted(self, dx: float, dy: float) -> list[Part]:
         mv = lambda pts: [(x + dx, y + dy) for x, y in pts]
-        return [Part(mv(p.a), mv(p.b), mv(p.hull), p.label) for p in self.parts]
+        return [Part(mv(p.a), mv(p.b), mv(p.hull), p.label, list(p.outer)) for p in self.parts]
 
 
 def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int, deg: int = 0) -> Slab:
@@ -499,7 +499,7 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
         b = turn(_orient(_section_at(tris, k, z1, i, j, zmin, zmax), spec.mirror))
         pa, pb = _pair_loft(a, b, spec.points, machine.kerf_mm, _spar(spec))
         hull = geom.convex_hull(pa + pb)
-        parts = [Part(pa, pb, hull, f"Scheibe {index}")]
+        parts = [Part(pa, pb, hull, f"Scheibe {index}", list(range(spec.points)))]
         kind = "verlaufend"
         # how far the straight wire strays from the true, curved skin between the faces
         mid = turn(_orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror))
@@ -515,7 +515,7 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
     # pieces are packed with half the gap around each: two pieces end up
     # `gap` apart (cut path to cut path), which the wire can still pass
     half = pack_gap(spec, machine) / 2
-    parts = [Part(p.a, p.b, geom.grow(p.hull, half), p.label) for p in parts]
+    parts = [Part(p.a, p.b, geom.grow(p.hull, half), p.label, list(p.outer)) for p in parts]
     xs = [q[0] for p in parts for q in p.a + p.b]; ys = [q[1] for p in parts for q in p.a + p.b]
     hx = [q[0] for p in parts for q in p.hull]; hy = [q[1] for p in parts for q in p.hull]
     notes.insert(0, f"Scheibe {index} von {count} ({spec.axis} = {z0:.1f}..{z1:.1f}), {kind}, "
@@ -693,6 +693,7 @@ class Board:
     path: WingPath
     slabs: list[int]
     size: tuple[float, float]           # used area w x h
+    entry_y: float = 0.0                # board-plane height of the entry line (path y = board y - entry_y + chord_y)
 
 
 def build_boards(spec: SliceSpec, machine: Machine) -> tuple[list[Board], list[str]]:
@@ -714,16 +715,16 @@ def build_boards(spec: SliceSpec, machine: Machine) -> tuple[list[Board], list[s
         for pl in placed:
             # placed with the packing gap around them; routing wants the bare hulls back
             parts.extend(Part([(x + x0, y) for x, y in p.a], [(x + x0, y) for x, y in p.b],
-                              geom.convex_hull([(x + x0, y) for x, y in p.a + p.b]), p.label) for p in pl.parts)
-        entry = (spec.block_x, parts[0].a[0][1]) if len(placed) == 1 and len(parts) == 1 else (spec.block_x, 0.0)
-        pa, pb, order = route_parts(parts, entry, machine.kerf_mm)
+                              geom.convex_hull([(x + x0, y) for x, y in p.a + p.b]), p.label, list(p.outer))
+                         for p in pl.parts)
+        pa, pb, order, entry = route_parts(parts, spec.block_x, machine.kerf_mm)
         y0 = entry[1]
-        pa = [(x, y - y0) for x, y in pa]; pb = [(x, y - y0) for x, y in pb]
+        pa = [(x, y - y0) for x, y in [entry] + pa]; pb = [(x, y - y0) for x, y in [entry] + pb]
         path = loft(spec, pa, pb, machine)
         used_w = max(pl.bbox[2] for pl in placed)
         used_h = max(pl.bbox[3] for pl in placed)
         nums = sorted(pl.slab.index for pl in placed)
-        boards.append(Board(b, path, nums, (used_w, used_h)))
+        boards.append(Board(b, path, nums, (used_w, used_h), entry[1]))
         turned = [f"{pl.slab.index} um {pl.deg}°" for pl in placed if pl.deg]
         notes.append(f"Platte {b}: Scheiben {', '.join(map(str, nums))} in Schnittreihenfolge "
                      f"{', '.join(parts[k].label.split()[-1] for k in order)}; belegt {used_w:.0f} x {used_h:.0f} mm "

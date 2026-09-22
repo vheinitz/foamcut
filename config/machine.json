@@ -34,7 +34,7 @@
     "Y": true
   },
   "jog_feed": 375.0,
-  "kerf_mm": 4.0,
+  "kerf_mm": 2.0,
   "max_rate": {
     "U": 375.0,
     "V": 137.9,
