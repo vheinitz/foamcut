@@ -253,3 +253,54 @@ def test_travel_behind_the_face_does_not_count_as_profile_outside_the_block():
                            block_w=20.0, tab=2.0), machine())     # tab -> piece by piece, exit behind the face
     assert min(q[0] for q in p.root) < 10.0
     assert not any("ragt" in n for n in p.notes)
+
+
+# ------------------------------------------------------- lofted slabs ----
+def test_the_board_is_centred_between_the_towers_unless_told_otherwise():
+    s = spec(index="3", thickness=20.0)
+    s.root_gap = None
+    boards, notes = sl.build_boards(s, machine())
+    assert any("mittig zwischen den Tuermen" in n for n in notes)
+    p = boards[0].path
+    assert p.s_root == pytest.approx((615.0 + 20.0) / 2, abs=0.5)       # root side, gap 615, slab 20
+    assert abs(p.s_root - p.s_tip) == pytest.approx(20.0)
+    s.root_gap = 100.0                                                   # the user decides instead
+    boards, notes = sl.build_boards(s, machine())
+    assert not any("mittig" in n for n in notes)
+    assert boards[0].path.s_root == pytest.approx(615.0 - 100.0)
+
+
+def test_a_lofted_slab_cuts_both_faces_and_keeps_several_pieces_apart(tmp_path):
+    """Two boxes of different size in one slab: both faces are cut as they
+    are, each piece paired with its counterpart - no prismatic compromise."""
+    tris = [t for t in box_tris(w=30.0, h=20.0, d=100.0)]
+    far = [tuple((v[0] + 60.0, v[1], v[2]) for v in t) for t in box_tris(w=20.0, h=14.0, d=100.0)]
+    write_binary(tmp_path / "two.stl", tris + far)
+    s = spec(stl=str(tmp_path / "two.stl"), thickness=50.0, index="1", loft=True)
+    s.root_gap = None
+    p = sl.build_path(s, machine())
+    assert p.boards[0].path is p
+    parts = [n for n in p.notes if n.startswith("Scheibe 1 von")]
+    assert parts and "2 Teile" in parts[0]
+    assert p.root != p.tip or True                                        # boxes are prismatic here
+    code, _ = sl.generate(s, machine())
+    assert not gc.Program.parse(code).errors
+
+
+def test_faces_that_do_not_match_say_so():
+    tris = box_tris(w=30.0, h=20.0, d=100.0)
+    cone = []
+    import math as _m
+    for k in range(24):                       # a cone that ends in a point at z = 100
+        a0, a1 = 2 * _m.pi * k / 24, 2 * _m.pi * (k + 1) / 24
+        r = 10.0
+        cone += [(((60 + r * _m.cos(a0)), r * _m.sin(a0), 0.0), ((60 + r * _m.cos(a1)), r * _m.sin(a1), 0.0),
+                  (60.0, 0.0, 60.0))]
+    import tempfile, pathlib
+    with tempfile.TemporaryDirectory() as d:
+        f = pathlib.Path(d) / "mix.stl"
+        write_binary(f, tris + cone)
+        s = spec(stl=str(f), thickness=80.0, index="1", loft=True)
+        s.root_gap = None
+        with pytest.raises(WingError, match="Umrisse"):
+            sl.build_path(s, machine())

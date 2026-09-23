@@ -103,8 +103,14 @@ fährt die Software wie bisher Teil für Teil von hinten an; Scheibenliste mit E
 fährt zwischen ihnen um die schon geschnittenen herum; passen nicht alle, gibt es **ein
 Programm je Platte** (`…_platte1.nc`, `_platte2.nc`): die Programmseite zeigt
 nach dem Ende von Platte 1, welche Platte einzulegen ist, und lädt Platte 2
-erst über „Nächste Platte laden…“ – dann wie immer Start; verlaufend zwischen den beiden
-Schnittflächen (Sehnenfehler je Scheibe im Ergebnis) oder prismatisch;
+erst über „Nächste Platte laden…“ – dann wie immer Start; **verlaufend** ist der Normalfall: beide Türme
+fahren unabhängig, die Scheibe bekommt ihre beiden echten Schnittflächen und
+damit den Winkel eines konischen Rumpfs (Sehnenfehler je Scheibe im Ergebnis);
+zerfällt ein Schnitt in mehrere Umrisse, wird jeder mit seinem Gegenstück
+gepaart. **Prismatisch** (`verlaufend = nein`) ist der Rückfall, wenn die
+beiden Flächen nicht zusammenpassen. Die Plattenlage entlang des Drahts kommt
+von der Software (mittig zwischen den Türmen, so teilt sich der Schrägversatz
+gleichmäßig auf beide Schlitten) oder aus dem Feld *Seite A ab Turm*;
 Holmnut von oben/unten in Körperkoordinaten, also in jeder Scheibe an
 derselben Stelle – Rümpfe und große Flügel aus Schaumscheiben auf Holmen;
 Reiter „Objekt“ zeigt Zeichnung bzw. drehbaren Körper mit markierter Scheibe),

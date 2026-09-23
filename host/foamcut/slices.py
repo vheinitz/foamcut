@@ -15,6 +15,7 @@ Axes: the STL axis chosen as `axis` becomes the span (block thickness),
 """
 from __future__ import annotations
 
+import copy
 import math
 import struct
 from dataclasses import dataclass, field
@@ -65,8 +66,10 @@ FIELDS = [
         ("spar_w", "Nut Breite", "mm", "6", "Breite der Leiste; die Kerf ist beruecksichtigt.", "num"),
     ]),
     ("lage", "Lage im Schneider", [
-        ("root_gap", "Seite A ab Turm", "mm", "150",
-         "Abstand der Seite A des Blocks vom Turm mit dem festen Draht, entlang des Drahts.", "num"),
+        ("root_gap", "Seite A ab Turm", "mm", "",
+         "Abstand der Seite A der Platte vom Turm mit dem festen Draht, entlang des Drahts. "
+         "Leer = die Software legt die Platte mittig zwischen die Tuerme; beim verlaufenden Schnitt "
+         "teilt sich der Schraegversatz dann gleichmaessig auf beide Schlitten auf.", "num"),
         ("block_x", "Block Rueckseite X", "mm", "20",
          "Abstand der Blockrueckseite vom Referenzpunkt nach vorn. Dort taucht der Draht ein.", "num"),
         ("table_y", "Tischoberkante Y", "mm", "20",
@@ -96,7 +99,7 @@ TEMPLATE = _template(FIELDS, ("; Scheiben eines 3D-Koerpers (STL) fuer den Schau
 _NUMERIC = {"scale", "thickness", "gap", "points", "spar_x", "spar_y", "spar_w", "tab", "root_gap", "block_x", "table_y", "lead", "margin",
             "block_s", "block_w", "block_len", "block_h"}
 _MACHINE_KEYS = {"kerf", "feed", "wire", "warmup"}
-_REQUIRED = {"stl", "thickness", "root_gap", "block_x", "table_y"}
+_REQUIRED = {"stl", "thickness", "block_x", "table_y"}
 _BOOL = {"ja": True, "nein": False, "yes": True, "no": False, "true": True, "false": False, "1": True, "0": False}
 
 
@@ -116,7 +119,7 @@ class SliceSpec:
     spar_x: float = 0.0
     spar_y: float = 0.0
     spar_w: float = 6.0
-    root_gap: float = 150.0
+    root_gap: float | None = None       # None: centre the board between the towers
     block_x: float = 20.0
     table_y: float = 20.0
     chord_y: float | None = None
@@ -352,44 +355,44 @@ def _prepare(loops: list[list[Point]], spar) -> tuple[list[list[Point]], list[in
     return loops, keys
 
 
-def _pair_loft(a_loops, b_loops, n: int, kerf: float, spar=None) -> tuple[list[Point], list[Point]]:
-    """Side paths for a lofted slab: one outline (plus holes) per side,
-    resampled to the same point counts from the rearmost point (and the
-    same slot corners, if a spar slot is cut); holes via a slit from the
-    outline's rearmost point (ring scheme)."""
-    a_loops, keys_a = _prepare(a_loops, spar)
-    b_loops, keys_b = _prepare(b_loops, spar)
-    oa = classify(a_loops, kerf); ob = classify(b_loops, kerf)
-    if len(oa) != 1 or len(ob) != 1:
-        raise WingError(f"verlaufender Schnitt braucht einen Umriss je Seite, hier {len(oa)} / {len(ob)} - "
-                        "'loft = nein' waehlen oder duennere Scheiben")
-    A, B = oa[0], ob[0]
+def _match(a_outs: list, b_outs: list) -> list[tuple]:
+    """Pair the outlines of the two cut faces: nearest centres first. A slab
+    of a car gives a body and two wheels on both faces - each has to be cut
+    together with its counterpart."""
+    if len(a_outs) != len(b_outs):
+        raise WingError(f"Die beiden Schnittflaechen haben {len(a_outs)} und {len(b_outs)} Umrisse - "
+                        "duennere Scheiben waehlen oder 'verlaufend = nein'")
+    free = list(range(len(b_outs)))
+    pairs = []
+    for A in sorted(a_outs, key=lambda o: -abs(geom.signed_area(o.loop))):
+        ca = geom.centre_of(A.loop)
+        k = min(free, key=lambda j: math.dist(ca, geom.centre_of(b_outs[j].loop)))
+        free.remove(k)
+        pairs.append((A, b_outs[k]))
+    return pairs
+
+
+def _pair_loft(A, B, n: int, keys_a: list[int], keys_b: list[int]) -> tuple[list[Point], list[Point]]:
+    """Side paths for one lofted piece: the two outlines resampled to the same
+    point counts from their rearmost point (and the same slot corners, if a
+    spar slot is cut); holes via a slit from the outline's rearmost point."""
     if len(A.holes) != len(B.holes):
-        raise WingError(f"Loecher: {len(A.holes)} auf Seite A, {len(B.holes)} auf Seite B - 'loft = nein' waehlen")
-    # classify keeps vertex order (loops are already CCW and deduped), so the
-    # slot corner indices still hold; the rearmost vertex joins them as a key
-    keys = None
-    counts = None
+        raise WingError(f"Loecher: {len(A.holes)} auf der einen, {len(B.holes)} auf der anderen "
+                        "Schnittflaeche - 'verlaufend = nein' waehlen")
+    keys = counts = keys_b_ordered = None
     if keys_a:
-        keys = sorted(set(keys_a) | {A.rear}) if A.rear not in keys_a else sorted(keys_a)
+        keys = sorted(set(keys_a) | {A.rear})
         start = keys.index(A.rear)
         keys = keys[start:] + keys[:start]                 # begin at the rear
         counts = geom.segment_counts(A.loop, keys, n)
-        # side B: same corner indices, but its own rearmost vertex may differ in
-        # index; the slot corners are the same indices by construction
-        keys_bb = sorted(set(keys_b) | {B.rear}) if B.rear not in keys_b else sorted(keys_b)
+        keys_bb = sorted(set(keys_b) | {B.rear})
         if len(keys_bb) != len(keys):
-            keys_bb = sorted(set(keys_b) | {A.rear})       # fall back: same index as on side A
-            if len(keys_bb) != len(keys):
-                raise WingError("Holmnut: Schnittflaechen passen nicht zusammen - 'loft = nein' waehlen")
-        start_b = keys_bb.index(B.rear if B.rear in keys_bb else A.rear)
+            raise WingError("Holmnut: Schnittflaechen passen nicht zusammen - 'verlaufend = nein' waehlen")
+        start_b = keys_bb.index(B.rear)
         keys_b_ordered = keys_bb[start_b:] + keys_bb[:start_b]
 
     def path_for(o, key_list):
-        if key_list:
-            outer = geom.resample_keyed(o.loop, key_list, counts)
-        else:
-            outer = geom.resample(o.loop, n, o.rear)
+        outer = geom.resample_keyed(o.loop, key_list, counts) if key_list else geom.resample(o.loop, n, o.rear)
         out = list(outer)
         m = max(24, n // 2)
         for h in sorted(o.holes, key=lambda h: h.loop[h.rear][1]):
@@ -397,7 +400,7 @@ def _pair_loft(a_loops, b_loops, n: int, kerf: float, spar=None) -> tuple[list[P
             out.append(outer[0])
         return out
     # holes paired by height order on both sides
-    return path_for(A, keys), path_for(B, keys_b_ordered if keys else None)
+    return path_for(A, keys), path_for(B, keys_b_ordered)
 
 
 def parse_indices(text: str, count: int) -> list[int]:
@@ -457,25 +460,29 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
     notes: list[str] = []
     turn = lambda loops: [_rotated(l, deg) for l in loops]
     if spec.loft:
-        a = turn(_orient(_section_at(tris, k, z0, i, j, zmin, zmax), spec.mirror))
-        b = turn(_orient(_section_at(tris, k, z1, i, j, zmin, zmax), spec.mirror))
-        pa, pb = _pair_loft(a, b, spec.points, machine.kerf_mm, _spar(spec))
-        hull = geom.convex_hull(pa + pb)
-        parts = [Part(pa, pb, hull, f"Scheibe {index}", list(range(spec.points)))]
-        kind = "verlaufend"
-        # how far the straight wire strays from the true, curved skin between the faces
+        # both cut faces, each piece paired with its counterpart: the two
+        # towers run independently, exactly as for a wing
+        a_loops, keys_a = _prepare(turn(_orient(_section_at(tris, k, z0, i, j, zmin, zmax), spec.mirror)), _spar(spec))
+        b_loops, keys_b = _prepare(turn(_orient(_section_at(tris, k, z1, i, j, zmin, zmax), spec.mirror)), _spar(spec))
+        oa, ob = classify(a_loops, machine.kerf_mm), classify(b_loops, machine.kerf_mm)
+        parts = []
         mid = turn(_orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror))
-        sag = _sagitta(pa, pb, mid)
-        if sag is not None:
-            notes.append(f"Scheibe {index}: Sehnenfehler max {sag:.2f} mm (gerader Draht gegen die runde Haut)")
+        for n_pair, (A, B) in enumerate(_match(oa, ob), start=1):
+            pa, pb = _pair_loft(A, B, spec.points, keys_a, keys_b)
+            label = f"Scheibe {index}" + (f".{n_pair}" if len(oa) > 1 else "")
+            parts.append(Part(pa, pb, geom.convex_hull(pa + pb), label, list(range(len(pa)))))
+            sag = _sagitta(pa, pb, mid)
+            if sag is not None and sag > 0.05:
+                notes.append(f"{label}: Sehnenfehler max {sag:.2f} mm (gerader Draht gegen die runde Haut)")
+        kind = "verlaufend"
     else:
         mid = turn(_orient(_section_at(tris, k, (z0 + z1) / 2, i, j, zmin, zmax), spec.mirror))
         mid, _ = _prepare(mid, _spar(spec))
         outlines = classify(mid, machine.kerf_mm)
         # a section can fall into several outlines (a car body and its wheels):
         # number them, the cut order note names them
-        parts = [part_from_outline(o, spec.tab, f"Scheibe {index}" + (f".{i + 1}" if len(outlines) > 1 else ""),
-                                   machine.kerf_mm) for i, o in enumerate(outlines)]
+        parts = [part_from_outline(o, spec.tab, f"Scheibe {index}" + (f".{n + 1}" if len(outlines) > 1 else ""),
+                                   machine.kerf_mm) for n, o in enumerate(outlines)]
         kind = "prismatisch"
     # pieces are packed with half the gap around each: two pieces end up
     # `gap` apart (cut path to cut path), which the wire can still pass
@@ -484,13 +491,14 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
     xs = [q[0] for p in parts for q in p.a + p.b]; ys = [q[1] for p in parts for q in p.a + p.b]
     hx = [q[0] for p in parts for q in p.hull]; hy = [q[1] for p in parts for q in p.hull]
     notes.insert(0, f"Scheibe {index} von {count} ({spec.axis} = {z0:.1f}..{z1:.1f}), {kind}, "
-                    f"{max(xs) - min(xs):.1f} x {max(ys) - min(ys):.1f} mm")
+                    f"{max(xs) - min(xs):.1f} x {max(ys) - min(ys):.1f} mm"
+                    + (f", {len(parts)} Teile" if len(parts) > 1 else ""))
     return Slab(index, z0, z1, parts, (max(hx) - min(hx), max(hy) - min(hy)), (min(hx), min(hy)), notes, deg)
 
 
 def pack_gap(spec: SliceSpec, machine: Machine) -> float:
-    """Foam left between two pieces: two kerfs (so the wire can still travel
-    between them at one kerf from each) plus a little, or more if asked."""
+    """Foam left between two pieces: enough for the wire to travel between
+    them (one kerf from each), or more if asked."""
     return max(spec.gap, clearance(machine.kerf_mm) + 0.5)
 
 
@@ -655,11 +663,18 @@ class Board:
 
 
 def build_boards(spec: SliceSpec, machine: Machine) -> tuple[list[Board], list[str]]:
+    spec = copy.copy(spec)
     tris, zmin, zmax, count = _body(spec)
     indices = parse_indices(spec.index, count)
     w, h = _usable(spec, machine)
     boards: list[Board] = []
     notes: list[str] = []
+    if spec.root_gap is None:
+        # centred: the wire lines run out to both towers by the same amount,
+        # so a tapered slab costs both carriages the same travel
+        spec.root_gap = max((machine.tower_gap_mm - spec.thickness) / 2, 0.0)
+        notes.append(f"Platte mittig zwischen den Tuermen: Seite A ab Turm {spec.root_gap:.0f} mm "
+                     f"(Feld 'Seite A ab Turm' fuellen, um sie anders zu legen)")
     x0 = spec.block_x + spec.lead                     # rear edge of the usable area
     # turning pieces by quarter turns packs tighter; not with a spar slot (its
     # "oben" would turn too), not with a tab (the walk is no longer closed),
