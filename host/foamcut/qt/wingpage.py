@@ -305,8 +305,8 @@ class DesignPage(QWidget):
         prog = gc.Program.parse(code)
         problems = self.machine.check_extents(path.extents()) if self.machine.has_travel() else []
         for n in path.notes:
-            if (n.startswith(("TURMABSTAND", "Tisch zu", "Text nicht")) or "kreuzen" in n or "ragt" in n
-                    or "ausserhalb" in n):
+            if (n.startswith(("TURMABSTAND", "ZU LANG", "Tisch zu", "Text nicht")) or "kreuzen" in n
+                    or "ragt" in n or "ausserhalb" in n):
                 self._message(n, WARN_STYLE)
         for pr in problems:
             self._message(f"Verfahrweg: {pr}", ERR_STYLE)

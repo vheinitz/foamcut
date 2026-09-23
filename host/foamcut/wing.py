@@ -561,9 +561,10 @@ def loft(spec, root: list[Point], tip: list[Point], machine: Machine, mirrored: 
     """
     gap = machine.tower_gap_mm
     root_tower = machine.wire_fixed_tower
-    if spec.root_gap + spec.panel > gap:
-        raise WingError(f"root_gap + panel = {spec.root_gap + spec.panel:g} mm, "
-                        f"aber der Turmabstand ist nur {gap:g} mm")
+    # Longer than the machine? Not an error: the part may be meant as a body
+    # (STL) that is later cut as slices. Say so and carry on - the numbers are
+    # still right, only this machine cannot run them in one piece.
+    too_long = spec.root_gap + spec.panel > gap + 1e-9
     if root_tower == 1:
         s_root, s_tip = spec.root_gap, spec.root_gap + spec.panel
     else:
@@ -635,6 +636,10 @@ def loft(spec, root: list[Point], tip: list[Point], machine: Machine, mirrored: 
         s_hi += 1.0
     path.table_max = (max(s_lo, 0.0), min(s_hi, gap), TABLE_REST_CLEARANCE, xmax)
 
+    if too_long:
+        path.notes.append(f"ZU LANG FUER DIE MASCHINE: Wurzelabstand + Laenge = {spec.root_gap + spec.panel:g} mm, "
+                          f"Turmabstand nur {gap:g} mm. Als Koerper (STL) und fuer Rippen aus Scheiben "
+                          f"trotzdem brauchbar - am Stueck schneiden laesst es sich nicht.")
     path.notes.append(f"Wurzel an Turm {root_tower} (Draht fest, s={s_root:g}), Ende bei s={s_tip:g}, "
                       f"Turmabstand {gap:g}" + (", SPIEGELVERKEHRT (Profil kopfueber)" if mirrored else ""))
     path.notes.append(f"Mindestblock: {xmax - bx:.0f} x {ymax - ymin:.0f} x "
