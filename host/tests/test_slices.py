@@ -304,3 +304,11 @@ def test_faces_that_do_not_match_say_so():
         s.root_gap = None
         with pytest.raises(WingError, match="Umrisse"):
             sl.build_path(s, machine())
+
+
+def test_prismatic_says_how_much_taper_it_throws_away():
+    p = sl.build_path(spec(index="3", thickness=40.0, loft=False), machine())
+    note = next(n for n in p.notes if "prismatisch geschnitten" in n)
+    assert "unterscheiden sich um" in note and "Verlaufend = ja" in note
+    flat = sl.build_path(spec(index="250", thickness=0.4, loft=False), machine())   # the fat middle
+    assert not any("prismatisch geschnitten" in n for n in flat.notes)       # hardly any taper there
