@@ -13,7 +13,7 @@ loft = ja
 points = 120
 
 [lage]
-root_gap = 150
+root_gap =
 block_x = 20
 table_y = 20
 lead = 12
