@@ -74,7 +74,10 @@ Querschnitts, im Uhrzeigersinn von oben (0 oben, 90 vorn/Nase, 180 unten, 270
 hinten). Die Nut sitzt dort, wo dieser Strahl die Kontur verlässt, und steht
 senkrecht auf ihr, damit die Leiste flach darin liegt; `innen` macht daraus ein
 geschlossenes Loch 1 mm unter der Haut (nur im Körper, der Draht käme nicht
-hinein). Ältere Flügeldateien mit `30% oben 6x4` (Lage ab Nasenleiste) werden
+hinein). Ist das Teil länger als der Turmabstand, ist das **kein Fehler mehr**,
+sondern ein Hinweis: am Stück lässt es sich nicht schneiden, als Körper (STL)
+und für Rippen aus Scheiben ist es weiter brauchbar.
+Ältere Flügeldateien mit `30% oben 6x4` (Lage ab Nasenleiste) werden
 weiter gelesen – das ist der Weg, wenn es auf eine bestimmte Profiltiefe
 ankommt. „STL speichern…“ gibt den Flügel als
 Körper aus, mit Nuten und Löchern: daraus lassen sich später auf der Seite

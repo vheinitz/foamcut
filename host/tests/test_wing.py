@@ -118,9 +118,16 @@ def test_spec_errors():
         WingSpec.parse(TEMPLATE.replace("mirror       = nein", "mirror = vielleicht"))
 
 
-def test_panel_longer_than_tower_gap_is_refused():
-    with pytest.raises(WingError, match="Turmabstand"):
-        build_path(spec(panel=700.0, root_gap=150.0), machine(), AIRFOILS)
+def test_panel_longer_than_the_machine_is_only_a_warning():
+    """A part can be meant as a body (STL) to be cut as ribs later, so an
+    over-long panel is reported, not refused."""
+    p = build_path(spec(panel=700.0, root_gap=150.0), machine(gap=615.0), AIRFOILS)
+    assert any(n.startswith("ZU LANG FUER DIE MASCHINE") and "615" in n for n in p.notes)
+    assert p.root and p.tip                                  # the geometry is still built
+    from foamcut.wing import to_stl
+    assert to_stl(spec(panel=700.0, root_gap=150.0), machine(gap=615.0), AIRFOILS)[:7] == b"foamcut"
+    ok = build_path(spec(panel=400.0, root_gap=150.0), machine(gap=615.0), AIRFOILS)
+    assert not any("ZU LANG" in n for n in ok.notes)
 
 
 # ------------------------------------------------------------ geometry ----

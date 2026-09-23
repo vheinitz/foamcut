@@ -153,3 +153,9 @@ def test_shape_exports_a_watertight_body_with_hole_and_slots():
     assert len(loops) == 2                                   # outline and hole
     hole = min(loops, key=lambda l: abs(geom.signed_area(l)))
     assert abs(geom.signed_area(hole)) == pytest.approx(math.pi * 12 ** 2, rel=0.02)
+
+
+def test_shape_longer_than_the_machine_is_only_a_warning():
+    p = sh.build_path(spec(panel=900.0), machine())
+    assert any(n.startswith("ZU LANG FUER DIE MASCHINE") for n in p.notes)
+    assert sh.to_stl(spec(panel=900.0), machine())[:7] == b"foamcut"
