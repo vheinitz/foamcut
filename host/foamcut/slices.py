@@ -484,6 +484,19 @@ def _slab(spec: SliceSpec, machine: Machine, tris, zmin, zmax, count, index: int
         parts = [part_from_outline(o, spec.tab, f"Scheibe {index}" + (f".{n + 1}" if len(outlines) > 1 else ""),
                                    machine.kerf_mm) for n, o in enumerate(outlines)]
         kind = "prismatisch"
+        # prismatic throws the taper away - say how much, it is easy to leave
+        # this switch on by accident
+        span = lambda loops: (max(q[0] for l in loops for q in l) - min(q[0] for l in loops for q in l),
+                              max(q[1] for l in loops for q in l) - min(q[1] for l in loops for q in l))
+        try:
+            fa = span(_section_at(tris, k, z0, i, j, zmin, zmax))
+            fb = span(_section_at(tris, k, z1, i, j, zmin, zmax))
+            drop = max(abs(fa[0] - fb[0]), abs(fa[1] - fb[1]))
+        except WingError:
+            drop = 0.0
+        if drop > 0.5:
+            notes.append(f"Scheibe {index} prismatisch geschnitten, aber die beiden Schnittflaechen "
+                         f"unterscheiden sich um {drop:.1f} mm - mit 'Verlaufend = ja' bekommt sie ihren Winkel")
     # pieces are packed with half the gap around each: two pieces end up
     # `gap` apart (cut path to cut path), which the wire can still pass
     half = pack_gap(spec, machine) / 2
