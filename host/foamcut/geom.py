@@ -402,6 +402,51 @@ def notch_at(loop: list[Point], frac: float, w: float, h: float) -> tuple[list[P
     return slot(loop, p, t, n, w, h)
 
 
+def centre_of(loop: list[Point]) -> Point:
+    xs = [q[0] for q in loop]; ys = [q[1] for q in loop]
+    return ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+
+
+def ray_at(loop: list[Point], deg: float) -> tuple[Point, Point, Point]:
+    """Where the ray from the centre of the outline at `deg` clockwise from
+    straight up leaves it: point, unit tangent of the outline there and the
+    unit normal pointing back inside. 0 deg = up, 90 = forward (+X), 180 =
+    down, 270 = back - like a clock face laid over the section."""
+    c = centre_of(loop)
+    a = math.radians(deg)
+    d = (math.sin(a), math.cos(a))
+    hit = ray_hit(c, d, loop)
+    if hit is None:
+        raise ValueError(f"{deg:g} Grad trifft die Kontur nicht")
+    dist, edge = hit
+    p = (c[0] + d[0] * dist, c[1] + d[1] * dist)
+    a1, b1 = loop[edge], loop[(edge + 1) % len(loop)]
+    tx, ty = b1[0] - a1[0], b1[1] - a1[1]
+    ln = math.hypot(tx, ty) or 1.0
+    t = (tx / ln, ty / ln)
+    n = (t[1], -t[0])
+    if n[0] * d[0] + n[1] * d[1] > 0:            # must point back towards the centre
+        n = (-n[0], -n[1])
+    return p, t, n
+
+
+def notch_ray(loop: list[Point], deg: float, w: float, h: float) -> tuple[list[Point], list[int]]:
+    """Slot of w x h where the ray at `deg` leaves the outline, square to it."""
+    p, t, n = ray_at(loop, deg)
+    return slot(loop, p, t, n, w, h)
+
+
+def hole_ray(loop: list[Point], deg: float, w: float, h: float, skin: float = 1.0) -> list[Point]:
+    """Closed rectangle w x h on the same ray, lying `skin` under the surface
+    and turned with it: a spar that runs inside the part."""
+    p, t, n = ray_at(loop, deg)
+    c = (p[0] + n[0] * (skin + h / 2), p[1] + n[1] * (skin + h / 2))
+    out = []
+    for sw, sh in ((0.5, -0.5), (0.5, 0.5), (-0.5, 0.5), (-0.5, -0.5)):
+        out.append((c[0] + t[0] * sw * w + n[0] * sh * h, c[1] + t[1] * sw * w + n[1] * sh * h))
+    return ccw(out)
+
+
 def notch(loop: list[Point], x1: float, x2: float, y_end: float, side: str) -> tuple[list[Point], list[int]]:
     """Cut a slot into a CCW loop: from the top (side 'oben') or the bottom
     edge, between x1 < x2, down/up to y_end. Returns the new loop and the
