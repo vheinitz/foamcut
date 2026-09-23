@@ -29,6 +29,14 @@ from .machine import Machine
 
 # (key, label, unit, default, help) - the one place parameters are described.
 # kind: "num" numeric, "int" integer, "airfoil" file name, "bool" ja/nein
+SPAR_HELP = ("'<Winkel> [innen] <b>x<h>'. Winkel in Grad um die Mitte des Querschnitts, im Uhrzeigersinn "
+             "von oben: 0 = oben, 90 = vorn (Nase), 180 = unten, 270 = hinten. Die Nut sitzt dort, wo der "
+             "Strahl die Kontur verlaesst, und steht senkrecht auf ihr. Mit 'innen' wird daraus ein "
+             "geschlossenes Loch 1 mm unter der Haut (der Draht schneidet es am Stueck selbst nicht - es "
+             "steht aber im STL und damit in den Rippen). b x h in mm, das Mass der Leiste. "
+             "Beispiel: 0 6x4 oder 180 innen 8x5.")
+
+
 FIELDS = [
     ("profil", "Profil", [
         ("root_airfoil", "Profil an der Wurzel", "", "clarky.dat",
@@ -77,14 +85,8 @@ FIELDS = [
     ]),
     ("holm", "Holme", [
         ("holm1", "Holm 1", "", "",
-         "Aussparung fuer eine Holzleiste: '<Lage> <wo> <b>x<h>'. Lage = Abstand der Nutmitte von der "
-         "Nasenleiste; mit % bezogen auf die oertliche Tiefe (waechst bei Zuspitzung mit), ohne % in mm. "
-         "wo = oben | unten (Nut von der Haut aus, senkrecht zur Haut an dieser Stelle) oder innen "
-         "(geschlossenes Loch, liegend, mittig zwischen Ober- und Unterseite). b x h in mm, das Mass der "
-         "Leiste. Beispiel: 30% oben 6x4. Leer = kein Holm. Innenloecher schneidet der Draht nicht mit "
-         "(er muesste den Fluegel aufschlitzen) - sie stehen aber im STL und damit in den Rippen. "
-         "Das Haekchen schaltet den Holm ein und aus; der Wert bleibt stehen (in der Datei steht er dann "
-         "mit 'aus' davor).", "opttext"),
+         "Aussparung fuer eine Holzleiste: " + SPAR_HELP + " Das Haekchen schaltet den Holm ein und aus; "
+         "der Wert bleibt stehen (in der Datei steht er dann mit 'aus' davor).", "opttext"),
         ("holm2", "Holm 2", "", "", "Zweiter Holm, gleiche Schreibweise. Leer oder Haekchen weg = keiner.", "opttext"),
         ("holm3", "Holm 3", "", "", "Dritter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
         ("holm4", "Holm 4", "", "", "Vierter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
@@ -349,20 +351,60 @@ AILERON_STEPS = 6        # points along the lower-surface channel to and from th
 
 @dataclass
 class Spar:
-    """One wooden spar: where its slot sits in the profile and how big it is."""
-    dist: float                 # from the leading edge, mm or percent of chord
-    rel: bool                   # True: dist is a percentage of the local chord
-    where: str                  # oben | unten | innen
+    """One wooden spar. `deg` is the angle around the centre of the section,
+    clockwise from straight up (0 up, 90 forward, 180 down, 270 back); the
+    slot sits where that ray leaves the outline, square to it. `inner` makes
+    it a closed hole a millimetre under the skin instead of an open slot.
+
+    Older wing files gave the position along the chord instead (`dist`, `rel`,
+    `where` = oben|unten|innen); those are still read.
+    """
     w: float
     h: float
+    deg: float | None = None
+    inner: bool = False
+    dist: float = 0.0           # legacy: from the leading edge
+    rel: bool = False           # legacy: dist is a percentage of the chord
+    where: str = ""             # legacy: oben | unten | innen
+
+    def label(self) -> str:
+        if self.deg is not None:
+            return f"{self.deg:g}°{' innen' if self.inner else ''} {self.w:g}x{self.h:g}"
+        return f"{self.dist:g}{'%' if self.rel else ' mm'} {self.where} {self.w:g}x{self.h:g}"
 
     def x(self, chord: float, te_x: float) -> float:
-        """Centre of the slot in machine X (the LE sits at te_x + chord)."""
+        """Legacy placement: centre of the slot in machine X (LE at te_x + chord)."""
         d = chord * self.dist / 100.0 if self.rel else self.dist
         return te_x + chord - d
 
 
-_SPAR_RE = re.compile(r"^\s*([-+]?[\d.,]+)\s*(%?)\s+(oben|unten|innen)\s+([\d.,]+)\s*[xX*]\s*([\d.,]+)\s*$")
+_SPAR_RE = re.compile(r"^\s*([-+]?[\d.,]+)\s*(?:°|grad)?\s*(innen\s+)?([\d.,]+)\s*[xX*]\s*([\d.,]+)\s*$",
+                      re.IGNORECASE)
+_SPAR_OLD = re.compile(r"^\s*([-+]?[\d.,]+)\s*(%?)\s+(oben|unten|innen)\s+([\d.,]+)\s*[xX*]\s*([\d.,]+)\s*$",
+                       re.IGNORECASE)
+
+
+def parse_spars(text: str) -> list[Spar]:
+    """'0 6x4; 180 innen 8x5' -> [Spar, ...]; lines switched off with 'aus' and
+    empty ones are ignored. The old 'oben|unten' wing lines still work."""
+    num = lambda t: float(t.replace(",", "."))
+    out = []
+    for part in (text or "").replace("\n", ";").split(";"):
+        if not part.strip() or part.strip().lower().startswith(("aus", "off", "nein")):
+            continue                      # switched off, the value is kept for later
+        m = _SPAR_RE.match(part)
+        if m:
+            spar = Spar(num(m.group(3)), num(m.group(4)), deg=num(m.group(1)), inner=bool(m.group(2)))
+        else:
+            m = _SPAR_OLD.match(part)
+            if not m:
+                raise WingError(f"Holm {part.strip()!r}: erwartet " + SPAR_HELP.split(".")[0])
+            spar = Spar(num(m.group(4)), num(m.group(5)), dist=num(m.group(1)), rel=m.group(2) == "%",
+                        where=m.group(3).lower(), inner=m.group(3).lower() == "innen")
+        if spar.w <= 0 or spar.h <= 0:
+            raise WingError(f"Holm {part.strip()!r}: Breite und Hoehe muessen > 0 sein")
+        out.append(spar)
+    return out
 
 
 def spar_list(spec: "WingSpec") -> list[Spar]:
@@ -371,70 +413,57 @@ def spar_list(spec: "WingSpec") -> list[Spar]:
                                              + [spec.spars]) if t and t.strip()))
 
 
-def parse_spars(text: str) -> list[Spar]:
-    """'30% oben 6x4; 35% innen 8x8' -> [Spar, ...]"""
-    out = []
-    for part in (text or "").replace("\n", ";").split(";"):
-        if not part.strip() or part.strip().lower().startswith(("aus", "off", "nein")):
-            continue                      # switched off, the value is kept for later
-        m = _SPAR_RE.match(part)
-        if not m:
-            raise WingError(f"Holm {part.strip()!r}: erwartet '<Lage>[%] oben|unten|innen <b>x<h>'")
-        num = lambda t: float(t.replace(",", "."))
-        spar = Spar(num(m.group(1)), m.group(2) == "%", m.group(3), num(m.group(4)), num(m.group(5)))
-        if spar.w <= 0 or spar.h <= 0:
-            raise WingError(f"Holm {part.strip()!r}: Breite und Hoehe muessen > 0 sein")
-        out.append(spar)
-    return out
-
-
 def apply_spars(loop: list[Point], chord: float, te_x: float, spars: list[Spar],
                 notches: bool = True, holes: bool = True,
                 kerf: float = 0.0) -> tuple[list[Point], list[list[Point]], list[int]]:
-    """Cut the spar slots into one profile. Returns the outer walk (still
-    starting at the trailing edge), the closed hole loops and the walk indices
-    of the slot corners - the loft needs them to pair both sides up."""
+    """Cut the spar slots into one section. Returns the outer walk (still
+    starting where it did), the closed hole loops and the walk indices of the
+    slot corners - the loft needs them to pair both sides up."""
     outer = loop[:-1] if len(loop) > 1 and math.dist(loop[0], loop[-1]) < 1e-9 else list(loop)
-    te = outer[0]
-    cw = geom.signed_area(outer) < 0              # airfoil loops run clockwise; notch() wants CCW
+    start = outer[0]
+    cw = geom.signed_area(outer) < 0              # airfoil loops run clockwise; the slot code wants CCW
     if cw:
         outer = list(reversed(outer))
     hole_loops: list[list[Point]] = []
     keys: list[int] = []
-    for spar in sorted(spars, key=lambda s: -s.x(chord, te_x)):     # from the nose backwards
-        x = spar.x(chord, te_x)
-        x1, x2 = x - spar.w / 2, x + spar.w / 2
+    for spar in sorted(spars, key=lambda sp: -(sp.deg if sp.deg is not None else sp.x(chord, te_x))):
         try:
-            if spar.where == "innen":
+            if spar.inner:
                 if not holes:
                     continue
-                lo = geom.surface_y(outer, x1, False), geom.surface_y(outer, x2, False)
-                hi = geom.surface_y(outer, x1, True), geom.surface_y(outer, x2, True)
-                yc = (min(lo) + max(hi)) / 2
-                loop_h = geom.rect(x1 + kerf / 2, yc - spar.h / 2 + kerf / 2,
-                                   x2 - kerf / 2, yc + spar.h / 2 - kerf / 2)
+                if spar.deg is None:              # legacy: centred between the two surfaces at x
+                    x = spar.x(chord, te_x)
+                    x1, x2 = x - spar.w / 2, x + spar.w / 2
+                    yc = (min(geom.surface_y(outer, x1, False), geom.surface_y(outer, x2, False))
+                          + max(geom.surface_y(outer, x1, True), geom.surface_y(outer, x2, True))) / 2
+                    loop_h = geom.rect(x1 + kerf / 2, yc - spar.h / 2 + kerf / 2,
+                                       x2 - kerf / 2, yc + spar.h / 2 - kerf / 2)
+                else:
+                    loop_h = geom.hole_ray(outer, spar.deg, max(spar.w - kerf, 0.2),
+                                           max(spar.h - kerf, 0.2))
                 if any(not geom.inside(q, outer) for q in loop_h):
-                    raise ValueError("Loch passt nicht in das Profil")
+                    raise ValueError("Loch passt nicht in den Querschnitt")
                 hole_loops.append(loop_h)
             else:
                 if not notches:
                     continue
-                # square to the skin at that point, not upright: a strip glued
-                # onto the surface sits flat in the slot
                 # the wire melts `kerf` more than it travels: a w wide slot
                 # needs a path that is kerf narrower
-                outer, _ = geom.notch_normal(outer, x, max(spar.w - kerf, 0.2), spar.h, spar.where == "oben")
+                w = max(spar.w - kerf, 0.2)
+                if spar.deg is None:              # legacy: from the upper or lower surface at x
+                    outer, _ = geom.notch_normal(outer, spar.x(chord, te_x), w, spar.h, spar.where == "oben")
+                else:
+                    outer, _ = geom.notch_ray(outer, spar.deg, w, spar.h)
         except ValueError as e:
-            raise WingError(f"Holm bei {spar.dist:g}{'%' if spar.rel else ' mm'} "
-                            f"(Profiltiefe {chord:g} mm): {e}") from None
+            raise WingError(f"Holm {spar.label()} (Querschnitt {chord:g} mm tief): {e}") from None
     if cw:
         outer = list(reversed(outer))
-    if spars and outer[0] != te:                    # a notch rotates the loop - start at the TE again
-        k = min(range(len(outer)), key=lambda i: math.dist(outer[i], te))
+    if spars and outer[0] != start:               # a slot rotates the loop - start where we did
+        k = min(range(len(outer)), key=lambda i: math.dist(outer[i], start))
         outer = outer[k:] + outer[:k]
     for i, q in enumerate(outer):
         if all(abs(q[0] - r[0]) > 1e-9 or abs(q[1] - r[1]) > 1e-9 for r in loop):
-            keys.append(i)                          # a point the notch added
+            keys.append(i)                        # a point a slot added
     return outer + [outer[0]], hole_loops, keys
 
 
@@ -679,15 +708,13 @@ def build_path(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> WingPath:
             else:
                 raise WingError("Holmnut liegt an der Wurzel und am Ende verschieden - "
                                 "Lage in % angeben oder Holm schmaler machen")
-        cut = [sp for sp in spars if sp.where != "innen"]
-        inner = [sp for sp in spars if sp.where == "innen"]
+        cut = [sp for sp in spars if not sp.inner]
+        inner = [sp for sp in spars if sp.inner]
         if cut:
-            spar_notes.append("Holmnuten: " + ", ".join(
-                f"{sp.dist:g}{'%' if sp.rel else ' mm'} {sp.where} {sp.w:g}x{sp.h:g}" for sp in cut))
+            spar_notes.append("Holmnuten: " + ", ".join(sp.label() for sp in cut))
         if inner:
-            spar_notes.append("Innenloecher (" + ", ".join(
-                f"{sp.dist:g}{'%' if sp.rel else ' mm'} {sp.w:g}x{sp.h:g}" for sp in inner)
-                + ") sind nur im STL - der Draht kaeme nicht hinein, ohne den Fluegel aufzuschlitzen")
+            spar_notes.append("Innenloecher (" + ", ".join(sp.label() for sp in inner)
+                              + ") sind nur im STL - der Draht kaeme nicht hinein, ohne den Fluegel aufzuschlitzen")
     if spec.mirror:
         # upside down about the chord line; turning the cut piece over about its
         # chord axis then gives the mirror-image (opposite-hand) panel

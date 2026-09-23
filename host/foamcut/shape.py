@@ -21,8 +21,9 @@ from . import airfoil as af
 from . import geom
 from . import mesh
 from .machine import Machine
-from .wing import (Model, WingError, WingPath, _template, emit_gcode, field_catalogue, from_text, inverted, loft,
-                   to_text)
+from .wing import (Model, SPAR_HELP, Spar, WingError, WingPath, _template, emit_gcode, field_catalogue, from_text,
+                   inverted, loft, to_text)
+from .wing import parse_spars as wing_spars
 
 KINDS = ("rechteck", "dreieck", "kreis", "ellipse")
 HOLES = ("keine",) + KINDS
@@ -76,10 +77,8 @@ FIELDS = [
     _side("b", "Seite B (Ende)", dx=True),
     ("holm", "Holme", [
         ("holm1", "Holm 1", "", "",
-         "Aussparung fuer eine Holzleiste: '<Lage>% <b>x<h>'. Lage = Anteil des Umfangs ab dem Einschnitt "
-         "(dort, wo der Draht eintaucht, hinten), im Uhrzeigersinn der Kontur; 25 % ist also ein Viertel "
-         "herum. b x h in mm, das Mass der Leiste; die Nut steht senkrecht auf der Kontur an dieser Stelle. "
-         "Beispiel: 25% 6x4. Das Haekchen schaltet den Holm ein und aus, der Wert bleibt stehen.", "opttext"),
+         "Aussparung fuer eine Holzleiste: " + SPAR_HELP + " Das Haekchen schaltet den Holm ein und aus, "
+         "der Wert bleibt stehen.", "opttext"),
         ("holm2", "Holm 2", "", "", "Zweiter Holm, gleiche Schreibweise. Leer oder Haekchen weg = keiner.", "opttext"),
         ("holm3", "Holm 3", "", "", "Dritter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
         ("holm4", "Holm 4", "", "", "Vierter Holm. Leer oder Haekchen weg = keiner.", "opttext"),
@@ -303,40 +302,35 @@ def side_path(side: Side, n: int, kerf: float) -> list[Point]:
     return outer + hole + [outer[0]]
 
 
-_SPAR_RE = re.compile(r"^\s*([\d.,]+)\s*%?\s+([\d.,]+)\s*[xX*]\s*([\d.,]+)\s*$")
-
-
-def parse_spars(spec: "ShapeSpec") -> list[tuple[float, float, float]]:
-    """The filled-in spar lines as (fraction of the perimeter, width, height).
-    Lines switched off with 'aus' and empty ones are ignored."""
+def parse_spars(spec: "ShapeSpec") -> list[Spar]:
+    """The filled-in spar lines, same format as for a wing: angle around the
+    centre, clockwise from straight up. Lines switched off with 'aus' and
+    empty ones are ignored."""
     out = []
     for k in range(1, 7):
         text = (getattr(spec, f"holm{k}", "") or "").strip()
-        if not text or text.lower().startswith(("aus", "off", "nein")):
-            continue
-        m = _SPAR_RE.match(text)
-        if not m:
-            raise WingError(f"Holm {k} {text!r}: erwartet '<Lage>% <b>x<h>', z. B. 25% 6x4")
-        num = lambda t: float(t.replace(",", "."))
-        frac, w, h = num(m.group(1)) / 100.0, num(m.group(2)), num(m.group(3))
-        if w <= 0 or h <= 0:
-            raise WingError(f"Holm {k}: Breite und Hoehe muessen > 0 sein")
-        out.append((frac, w, h))
+        try:
+            for spar in wing_spars(text):
+                if spar.deg is None:
+                    raise WingError("Lage bitte als Winkel angeben, z. B. 0 6x4")
+                out.append(spar)
+        except WingError as e:
+            raise WingError(f"Holm {k}: {str(e).split(': ', 1)[-1]}") from None
     return out
 
 
-def _with_spars(outer: list[Point], spars, kerf: float) -> tuple[list[Point], list[int]]:
-    """Cut every spar slot into one side's outline. The position is a share of
-    the perimeter from the entry point, so both sides match up."""
-    keys: list[int] = []
+def _with_spars(outer: list[Point], spars: list[Spar], kerf: float) -> tuple[list[Point], list[int]]:
+    """Cut every spar slot into one side's outline. The angle is measured
+    around the centre of that outline, so both sides match up."""
     before = list(outer)
-    for frac, w, h in sorted(spars, key=lambda s: -s[0]):
+    keys: list[int] = []
+    for spar in sorted(spars, key=lambda sp: -sp.deg):
         try:
             # the wire melts `kerf` more than it travels: a w wide slot needs
             # a path that is kerf narrower
-            outer, _ = geom.notch_at(outer, frac, max(w - kerf, 0.2), h)
+            outer, _ = geom.notch_ray(outer, spar.deg, max(spar.w - kerf, 0.2), spar.h)
         except ValueError as e:
-            raise WingError(f"Holm bei {frac * 100:g} %: {e}") from None
+            raise WingError(f"Holm bei {spar.deg:g}°: {e}") from None
     for i, q in enumerate(outer):
         if all(abs(q[0] - r[0]) > 1e-9 or abs(q[1] - r[1]) > 1e-9 for r in before):
             keys.append(i)
@@ -351,7 +345,7 @@ def _sides(spec: ShapeSpec, machine: Machine, kerf: float) -> tuple[list[Point],
     a_out, b_out = a_all[:n], b_all[:n]
     a_hole = [a_all[n:2 * n]] if spec.a.hole != "keine" else []
     b_hole = [b_all[n:2 * n]] if spec.b.hole != "keine" else []
-    spars = parse_spars(spec)
+    spars = [sp for sp in parse_spars(spec) if not sp.inner]
     if spars:
         a_cut, ka = _with_spars(a_out[:-1], spars, kerf)
         b_cut, kb = _with_spars(b_out[:-1], spars, kerf)
@@ -392,8 +386,12 @@ def build_path(spec: ShapeSpec, machine: Machine) -> WingPath:
     desc = lambda s: f"{s.kind} {s.w:g}x{s.h:g}" + (f" Loch {s.hole} {s.hole_w:g}x{s.hole_h:g}" if s.hole != "keine" else "")
     path.notes.insert(1, f"Form: A {desc(spec.a)} -> B {desc(spec.b)}, Laenge {spec.panel:g}")
     spars = parse_spars(spec)
-    if spars:
-        path.notes.append("Holmnuten: " + ", ".join(f"{f * 100:g}% {w:g}x{h:g}" for f, w, h in spars))
+    cut = [sp for sp in spars if not sp.inner]
+    if cut:
+        path.notes.append("Holmnuten: " + ", ".join(sp.label() for sp in cut))
+    if len(cut) != len(spars):
+        path.notes.append("Innenloecher gibt es bei Formen nicht - sie haben schon ein Loch; "
+                          "Winkel ohne 'innen' angeben")
     # sides of different size: the wire lines converge and cross somewhere
     # beyond the smaller side; at a tower past that point the contour is inverted
     n = min(spec.points + 1, len(path.root))

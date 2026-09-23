@@ -68,16 +68,21 @@ dem festen Draht – sie gelten für alle Entwürfe), **Flügel** (Schritte link
 inline, letzte Werte gemerkt; Schritt *Block* nennt Mindestblock und
 Tischhöhe/-ausdehnung; Schritt *Holme* hat sechs Zeilen für Nuten und
 Löcher, je eine Leiste, jede mit einem Häkchen ein- und ausschaltbar (der Wert
-bleibt stehen; in der Datei steht dann „aus“ davor): „30% oben 6x4“. Lage in %
-wächst mit der Zuspitzung mit; die Nut steht senkrecht auf der Haut an dieser
-Stelle, nicht senkrecht im Raum, damit die Leiste flach darin liegt. „STL speichern…“ gibt den Flügel als
+bleibt stehen; in der Datei steht dann „aus“ davor). Format für Flügel **und**
+Formen gleich: **`<Winkel> [innen] <b>x<h>`** – Winkel in Grad um die Mitte des
+Querschnitts, im Uhrzeigersinn von oben (0 oben, 90 vorn/Nase, 180 unten, 270
+hinten). Die Nut sitzt dort, wo dieser Strahl die Kontur verlässt, und steht
+senkrecht auf ihr, damit die Leiste flach darin liegt; `innen` macht daraus ein
+geschlossenes Loch 1 mm unter der Haut (nur im Körper, der Draht käme nicht
+hinein). Ältere Flügeldateien mit `30% oben 6x4` (Lage ab Nasenleiste) werden
+weiter gelesen – das ist der Weg, wenn es auf eine bestimmte Profiltiefe
+ankommt. „STL speichern…“ gibt den Flügel als
 Körper aus, mit Nuten und Löchern: daraus lassen sich später auf der Seite
 *Scheiben* Rippen schneiden und mit Holzleisten zu einem größeren Flügel
 zusammensetzen. Innenlöcher schneidet der Draht am Flügel selbst nicht – er
 käme nicht hinein, ohne ihn aufzuschlitzen), **Formen** (freie Querschnitte je Seite, Scheibe
-oder Ring – Rumpfsegmente; Schritt *Holme* wie beim Flügel, die Lage aber als
-Anteil des Umfangs ab dem Einschnitt: „25% 6x4“ sitzt ein Viertel herum.
-„STL speichern…“ gibt auch hier den Körper aus), **Kontur** (SVG-Zeichnung aus Inkscape als
+oder Ring – Rumpfsegmente; Schritt *Holme* mit demselben Format wie beim
+Flügel, „STL speichern…“ gibt auch hier den Körper aus), **Kontur** (SVG-Zeichnung aus Inkscape als
 Parallelschnitt X=U/Y=V: Buchstaben, Silhouetten; Löcher über einen Schlitz
 nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
 **Scheiben** (STL-Körper in Scheiben einer Dicke; Scheiben „2,3,4“, „1-5“
