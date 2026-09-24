@@ -13,6 +13,7 @@ from the leading edge (x = 0) to the trailing edge (x = 1).
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 
 Point = tuple[float, float]
@@ -138,3 +139,67 @@ def offset_loop(loop: list[Point], distance: float) -> list[Point]:
         nx, ny = ty / length, -tx / length                         # right of travel = outward on CCW
         out.append((x + nx * distance, y + ny * distance))
     return out
+
+
+# ----------------------------------------------------------------- NACA ----
+NACA_RE = re.compile(r"^\s*(?:naca[\s-]*)?(\d{4})\s*$", re.IGNORECASE)
+NACA5_RE = re.compile(r"^\s*(?:naca[\s-]*)?(\d{5})\s*$", re.IGNORECASE)
+NACA_STATIONS = 200        # points per surface when a profile is computed
+
+
+def naca4(code: str, n: int = NACA_STATIONS) -> tuple[str, Surface, Surface]:
+    """A four digit NACA profile from its numbers, no data file needed.
+
+    2412 = 2 % camber at 40 % of the chord, 12 % thick. The trailing edge is
+    closed (last thickness coefficient 0.1036 instead of 0.1015) - a hot wire
+    cannot cut the open one that the original formula leaves.
+    """
+    m = NACA_RE.match(code)
+    if not m:
+        raise ValueError(f"{code!r} ist keine vierstellige NACA-Nummer")
+    d = m.group(1)
+    mc, p, tt = int(d[0]) / 100.0, int(d[1]) / 10.0, int(d[2:]) / 100.0
+    if tt <= 0:
+        raise ValueError(f"NACA {d}: Dicke 00 gibt es nicht")
+    upper: Surface = []
+    lower: Surface = []
+    for x in cosine_spacing(n):
+        yt = 5 * tt * (0.2969 * math.sqrt(x) - 0.1260 * x - 0.3516 * x ** 2
+                       + 0.2843 * x ** 3 - 0.1036 * x ** 4)
+        if mc > 0 and 0 < p < 1:
+            if x < p:
+                yc = mc / p ** 2 * (2 * p * x - x ** 2)
+                dy = 2 * mc / p ** 2 * (p - x)
+            else:
+                yc = mc / (1 - p) ** 2 * ((1 - 2 * p) + 2 * p * x - x ** 2)
+                dy = 2 * mc / (1 - p) ** 2 * (p - x)
+        else:
+            yc = dy = 0.0
+        th = math.atan(dy)
+        upper.append((x - yt * math.sin(th), yc + yt * math.cos(th)))
+        lower.append((x + yt * math.sin(th), yc - yt * math.cos(th)))
+    # the perpendicular offset moves the points a little in x; put them back on
+    # the same stations, so two profiles still pair point for point
+    upper = _normalise(sorted(upper))
+    lower = _normalise(sorted(lower))
+    return f"NACA {d}", upper, lower
+
+
+def is_naca(name: str) -> bool:
+    return bool(NACA_RE.match(name or "") or NACA5_RE.match(name or ""))
+
+
+def surfaces(name: str, airfoil_dir: Path) -> tuple[str, Surface, Surface]:
+    """A profile by name: a four digit NACA number is computed, anything else
+    is looked up as a file in `airfoil_dir`."""
+    if NACA_RE.match(name or ""):
+        return naca4(name)
+    if NACA5_RE.match(name or ""):
+        raise ValueError(f"{name.strip()}: fuenfstellige NACA-Profile rechnet foamcut nicht - "
+                         "als .dat in airfoil/ ablegen")
+    p = Path(name)
+    for cand in (p, airfoil_dir / name, airfoil_dir / f"{name}.dat"):
+        if cand.exists():
+            return load(cand)
+    raise ValueError(f"Profil nicht gefunden: {name} (gesucht in {airfoil_dir}; "
+                     "eine NACA-Nummer wie 2412 geht auch direkt)")

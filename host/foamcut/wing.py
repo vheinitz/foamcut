@@ -40,11 +40,15 @@ SPAR_HELP = ("'<Winkel> [innen] <b>x<h>'. Winkel in Grad um die Mitte des Quersc
 FIELDS = [
     ("profil", "Profil", [
         ("root_airfoil", "Profil an der Wurzel", "", "clarky.dat",
-         "Profildatei (.dat) fuer die Rumpfseite. Liegt in airfoil/.", "airfoil"),
+         "Profil fuer die Rumpfseite: Dateiname aus airfoil/ (.dat, Selig oder Lednicer) oder eine "
+         "vierstellige NACA-Nummer, die foamcut selbst ausrechnet - '2412' oder 'naca2412' "
+         "(2 % Woelbung bei 40 % der Tiefe, 12 % dick; 0012 ist symmetrisch). Die Hinterkante wird "
+         "geschlossen gerechnet, der Draht kann keine offene schneiden.", "airfoil"),
         ("root_chord", "Wurzeltiefe", "mm", "100",
          "Profiltiefe (Sehnenlaenge) an der Wurzel, Nasenleiste bis Hinterkante.", "num"),
         ("tip_airfoil", "Profil am Ende", "", "",
-         "Profildatei fuer das aeussere Ende. Leer = gleiches Profil wie an der Wurzel.", "airfoil"),
+         "Profil fuer das aeussere Ende, Datei oder NACA-Nummer wie an der Wurzel. "
+         "Leer = gleiches Profil wie an der Wurzel.", "airfoil"),
         ("tip_chord", "Endtiefe", "mm", "80",
          "Profiltiefe am aeusseren Ende. Gleich der Wurzeltiefe = Rechteckfluegel.", "num"),
         ("panel", "Panellaenge", "mm", "400",
@@ -679,10 +683,8 @@ def loft(spec, root: list[Point], tip: list[Point], machine: Machine, mirrored: 
 
 
 def build_path(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> WingPath:
-    root_file = _resolve(spec.root_airfoil, airfoil_dir)
-    tip_file = _resolve(spec.tip_airfoil, airfoil_dir)
-    _, r_up, r_lo = af.load(root_file)
-    _, t_up, t_lo = af.load(tip_file)
+    _, r_up, r_lo = _surfaces(spec.root_airfoil, airfoil_dir)
+    _, t_up, t_lo = _surfaces(spec.tip_airfoil, airfoil_dir)
     loop_r = af.resample_loop(r_up, r_lo, spec.points)
     loop_t = af.resample_loop(t_up, t_lo, spec.points)
 
@@ -754,22 +756,21 @@ def build_path(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> WingPath:
     return path
 
 
-def _resolve(name: str, airfoil_dir: Path) -> Path:
-    p = Path(name)
-    for cand in (p, airfoil_dir / name, airfoil_dir / f"{name}.dat"):
-        if cand.exists():
-            return cand
-    raise WingError(f"Profil nicht gefunden: {name} (gesucht in {airfoil_dir})")
+def _surfaces(name: str, airfoil_dir: Path):
+    """Upper and lower surface of a profile: a NACA number is computed, a name
+    is looked up in airfoil/."""
+    try:
+        return af.surfaces(name, airfoil_dir)
+    except ValueError as e:
+        raise WingError(str(e)) from None
 
 
 # -------------------------------------------------------------- g-code ------
 def _sections(spec: WingSpec, machine: Machine, airfoil_dir: Path):
     """Root and tip of the finished part (no kerf - this is the wing, not the
     wire path): outer loop and hole loops, in profile coordinates."""
-    root_file = airfoil_dir / spec.root_airfoil
-    tip_file = airfoil_dir / (spec.tip_airfoil or spec.root_airfoil)
-    _, r_up, r_lo = af.load(root_file)
-    _, t_up, t_lo = af.load(tip_file)
+    _, r_up, r_lo = _surfaces(spec.root_airfoil, airfoil_dir)
+    _, t_up, t_lo = _surfaces(spec.tip_airfoil or spec.root_airfoil, airfoil_dir)
     loop_r = af.resample_loop(r_up, r_lo, spec.points)
     loop_t = af.resample_loop(t_up, t_lo, spec.points)
     te_x = 0.0

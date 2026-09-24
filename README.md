@@ -56,7 +56,7 @@ renamed, which is how this build gets real `U` and `V` words.
 | `host/` | the `foamcut` command line tool and its tests |
 | `host/foamcut/qt/` | the PyQt6 interface; the masks are Qt Designer files in `qt/ui/*.ui` (loaded with `uic.loadUi`), dynamic widgets such as the mm canvases go into named placeholder layouts/splitters; `config/ui_state.json` remembers the last wing values, program and page |
 | `gcode/` | test programs, from a single axis bounce to a tapered block |
-| `airfoil/` | 295 airfoil `.dat` files (UIUC database via swarfer.co.za) |
+| `airfoil/` | 295 airfoil `.dat` files (UIUC database via swarfer.co.za); a four digit NACA number (`2412`) can be typed instead of a file name and is computed |
 | `config/beispiel.wing` | wing spec template, matches the measured travel |
 | `config/beispiel.shape` | free-shape spec template (fuselage segment, ring) |
 | `config/beispiel.contour`, `beispiel.svg` | SVG outline spec: ring, triangle and an "A" with its hole |
