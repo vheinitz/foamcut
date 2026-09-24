@@ -90,8 +90,10 @@ oder Ring – Rumpfsegmente; Schritt *Holme* mit demselben Format wie beim
 Flügel, „STL speichern…“ gibt auch hier den Körper aus), **Kontur** (SVG-Zeichnung aus Inkscape als
 Parallelschnitt X=U/Y=V: Buchstaben, Silhouetten; Löcher über einen Schlitz
 nach hinten, mehrere Teile nacheinander, Text vorher in Pfade umwandeln),
-**Scheiben** (STL-Körper in Scheiben einer Dicke; Scheiben „2,3,4“, „1-5“
-oder „alle“ werden nebeneinander auf einer Schaumplatte der Scheibendicke
+**Scheiben** (STL-Körper in Scheiben einer Dicke; Scheiben „2,3,4“, „1-5“, „$“ für die
+letzte, „*3“ für jede dritte (von der ersten an) oder „alle“ – gemischt, also
+etwa „1,*3,$“ für die erste, jede dritte und die letzte – werden nebeneinander
+auf einer Schaumplatte der Scheibendicke
 angeordnet (Platte Länge/Höhe, sonst Verfahrweg): Umrisse statt Rechtecke,
 Vierteldrehungen erlaubt, kleinstes umschließendes Rechteck, Scheiben
 2 × Schnittbreite + 0,5 mm auseinander; die Teile werden als **Kette**
