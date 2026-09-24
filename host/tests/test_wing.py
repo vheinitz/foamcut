@@ -633,3 +633,40 @@ def test_a_spar_can_be_switched_off_without_losing_its_value():
     assert next(n for n in p.notes if n.startswith("Holmnuten")).count("°") == 1
     s.holm2 = "90 5x4"
     assert [sp.deg for sp in spar_list(s)] == [0.0, 90.0]      # the value was still there
+
+
+# ---------------------------------------------------------------- NACA ----
+def test_naca_numbers_are_computed_instead_of_loaded():
+    from foamcut import airfoil as af
+    name, up, lo = af.naca4("2412")
+    xs = [k / 200 for k in range(201)]
+    thick = max(af._interp(up, x) - af._interp(lo, x) for x in xs)
+    camber = max((af._interp(up, x) + af._interp(lo, x)) / 2 for x in xs)
+    at = max(((af._interp(up, x) + af._interp(lo, x)) / 2, x) for x in xs)[1]
+    assert name == "NACA 2412"
+    assert thick == pytest.approx(0.12, abs=0.002)          # 12 % thick
+    assert camber == pytest.approx(0.02, abs=0.002)         # 2 % camber
+    assert at == pytest.approx(0.40, abs=0.02)              # at 40 % of the chord
+    assert af._interp(up, 1.0) == pytest.approx(af._interp(lo, 1.0), abs=1e-6)   # closed trailing edge
+    sym_up, sym_lo = af.naca4("0012")[1:]
+    assert af._interp(sym_up, 0.3) == pytest.approx(-af._interp(sym_lo, 0.3), abs=1e-9)
+    for bad in ("241", "naca24123", "abc"):
+        with pytest.raises(ValueError):
+            af.naca4(bad)
+
+
+def test_a_wing_can_be_cut_straight_from_naca_numbers():
+    p = build_path(spec(root_airfoil="naca2412", tip_airfoil="0012", root_chord=100.0, tip_chord=100.0),
+                   machine(kerf=0.0), AIRFOILS)
+    root_t = max(q[1] for q in p.root) - min(q[1] for q in p.root)
+    tip_t = max(q[1] for q in p.tip) - min(q[1] for q in p.tip)
+    assert root_t == pytest.approx(12.0, abs=0.3) and tip_t == pytest.approx(12.0, abs=0.3)
+    assert len(p.root) == len(p.tip)                        # still paired point for point
+    # the cambered root sits higher than the symmetric tip
+    assert max(q[1] for q in p.root) > max(q[1] for q in p.tip) + 1.0
+    code, path = generate(spec(root_airfoil="2412"), machine(), AIRFOILS)
+    assert "naca" in code.lower() or "2412" in code
+    with pytest.raises(WingError, match="nicht gefunden"):
+        build_path(spec(root_airfoil="gibtsnicht"), machine(), AIRFOILS)
+    with pytest.raises(WingError, match="fuenfstellige"):
+        build_path(spec(root_airfoil="naca23012"), machine(), AIRFOILS)

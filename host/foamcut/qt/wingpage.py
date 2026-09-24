@@ -49,6 +49,8 @@ class DesignPage(QWidget):
         self._timer.timeout.connect(self.rebuild)
 
         airfoils = sorted(p.name for p in airfoil_dir.glob("*.dat")) if airfoil_dir.exists() else []
+        # a NACA number may be typed straight in; these are the usual suspects
+        airfoils = ["naca0012", "naca2412", "naca3412", "naca4412", "naca6409"] + airfoils
         saved = state.get(model.key, {})
         cat = field_catalogue(model.fields)
 
