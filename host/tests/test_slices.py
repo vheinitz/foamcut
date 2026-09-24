@@ -162,15 +162,24 @@ def test_spar_slot_is_cut_on_both_faces_and_in_prism_mode():
 
 
 # --------------------------------------------------------------- boards ----
-def test_index_lists_ranges_and_all():
+def test_index_lists_ranges_last_and_every_nth():
     assert sl.parse_indices("3", 5) == [3]
     assert sl.parse_indices("2, 3,4", 5) == [2, 3, 4]
     assert sl.parse_indices("1-3", 5) == [1, 2, 3]
     assert sl.parse_indices("alle", 4) == [1, 2, 3, 4]
+    assert sl.parse_indices("$", 7) == [7]                       # the last one
+    assert sl.parse_indices("*3", 10) == [1, 4, 7, 10]           # every third, from the first
+    assert sl.parse_indices("1,*3,$", 11) == [1, 4, 7, 10, 11]   # first, every third, last
+    assert sl.parse_indices("4-$", 6) == [4, 5, 6]
+    assert sl.parse_indices("$,1,$", 5) == [1, 5]                # doubles dropped, in order
     with pytest.raises(WingError, match="gibt es nicht"):
         sl.parse_indices("6", 5)
     with pytest.raises(WingError, match="keine Nummer"):
         sl.parse_indices("x", 5)
+    with pytest.raises(WingError, match="nach dem \\* gehoert eine Zahl"):
+        sl.parse_indices("*x", 5)
+    with pytest.raises(WingError, match="n >= 1"):
+        sl.parse_indices("*0", 5)
 
 
 def test_several_slabs_share_one_board_and_overflow_onto_the_next():

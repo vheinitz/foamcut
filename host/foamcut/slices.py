@@ -43,9 +43,10 @@ FIELDS = [
         ("thickness", "Scheibendicke", "mm", "40",
          "Dicke jeder Scheibe = Blockdicke. Anzahl der Scheiben folgt aus der Laenge des Koerpers.", "num"),
         ("index", "Scheiben", "", "1",
-         "Welche Scheiben geschnitten werden, 1 = am Anfang der Achse: eine Nummer, Liste '2,3,4', Bereich '1-5' "
-         "oder 'alle'. Mehrere Scheiben werden nebeneinander auf der Platte angeordnet; passen nicht alle, "
-         "haelt das Programm an (M0) und verlangt die naechste Platte.", "text"),
+         "Welche Scheiben geschnitten werden, 1 = am Anfang der Achse. Eine Nummer, eine Liste '2,3,4', "
+         "ein Bereich '1-5', '$' fuer die letzte, '*3' fuer jede dritte (von der ersten an) oder 'alle'. "
+         "Alles mischbar: '1,*3,$' schneidet die erste, jede dritte und die letzte. Mehrere Scheiben werden "
+         "nebeneinander auf der Platte angeordnet; passen nicht alle, gibt es ein Programm je Platte.", "text"),
         ("gap", "Zusatzabstand", "mm", "0",
          "Zusaetzlicher Abstand zwischen zwei Scheiben auf der Platte. Ohne ihn liegen sie so eng, wie der "
          "Fahrweg des Drahts erlaubt (2 x Schnittbreite zu jedem Teil).", "num"),
@@ -404,33 +405,56 @@ def _pair_loft(A, B, n: int, keys_a: list[int], keys_b: list[int]) -> tuple[list
 
 
 def parse_indices(text: str, count: int) -> list[int]:
-    """'3', '2,3,4', '1-5', 'alle' -> slab numbers, 1-based, in the order given."""
+    """Which slabs to cut, out of `count`:
+
+        3          eine
+        2,3,4      mehrere
+        1-5        ein Bereich, 3-$ bis zur letzten
+        $          die letzte
+        *3         jede dritte, von der ersten an: 1, 4, 7, ...
+        alle       alle
+
+    Mixed freely - '1,*3,$' is the first, every third after it and the last.
+    Doubles are dropped, the result comes back in order.
+    """
     t = text.strip().lower()
     if t in ("alle", "all", "*"):
         return list(range(1, count + 1))
     out: list[int] = []
+
+    def one(tok: str) -> int:
+        tok = tok.strip()
+        if tok in ("$", "letzte", "last"):
+            return count
+        try:
+            return int(float(tok))
+        except ValueError:
+            raise WingError(f"Scheiben: {tok!r} ist keine Nummer ($ = letzte, *n = jede n-te)") from None
+
     for tok in t.replace(";", ",").split(","):
         tok = tok.strip()
         if not tok:
             continue
-        if "-" in tok:
-            a, _, b = tok.partition("-")
+        if tok.startswith("*"):
             try:
-                lo, hi = int(a), int(b)
+                step = int(float(tok[1:]))
             except ValueError:
-                raise WingError(f"Scheiben: {tok!r} ist kein Bereich") from None
-            out.extend(range(lo, hi + 1))
+                raise WingError(f"Scheiben: {tok!r} - nach dem * gehoert eine Zahl, z. B. *3") from None
+            if step < 1:
+                raise WingError("Scheiben: *n braucht n >= 1")
+            out.extend(range(1, count + 1, step))
+        elif "-" in tok[1:]:                      # 1-5, 3-$ (not a leading minus)
+            a, _, b = tok[0] + tok[1:].partition("-")[0], "-", tok[1:].partition("-")[2]
+            out.extend(range(one(a), one(b) + 1))
         else:
-            try:
-                out.append(int(float(tok)))
-            except ValueError:
-                raise WingError(f"Scheiben: {tok!r} ist keine Nummer") from None
+            out.append(one(tok))
     if not out:
         raise WingError("Scheiben: keine Nummer angegeben")
     bad = [n for n in out if n < 1 or n > count]
     if bad:
-        raise WingError(f"Scheibe {bad[0]} gibt es nicht: {count} Scheiben ({'1' if count == 1 else '1..' + str(count)})")
-    return out
+        raise WingError(f"Scheibe {bad[0]} gibt es nicht: {count} Scheiben "
+                        f"({'1' if count == 1 else '1..' + str(count)})")
+    return sorted(dict.fromkeys(out))
 
 
 @dataclass
