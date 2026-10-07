@@ -670,3 +670,17 @@ def test_a_wing_can_be_cut_straight_from_naca_numbers():
         build_path(spec(root_airfoil="gibtsnicht"), machine(), AIRFOILS)
     with pytest.raises(WingError, match="fuenfstellige"):
         build_path(spec(root_airfoil="naca23012"), machine(), AIRFOILS)
+
+
+def test_an_empty_tip_profile_falls_back_to_the_root_one():
+    """The field may be left empty - that means 'same as the root', and it
+    must not be taken for a file name (an empty path is the directory)."""
+    s = spec(root_airfoil="2412")
+    s.tip_airfoil = ""
+    p = build_path(s, machine(kerf=0.0), AIRFOILS)
+    assert len(p.root) == len(p.tip)
+    code, _ = generate(s, machine(), AIRFOILS)
+    assert "2412 100 -> 2412 80" in code.splitlines()[0]
+    from foamcut import airfoil as af
+    with pytest.raises(ValueError, match="kein Profil angegeben"):
+        af.surfaces("", AIRFOILS)
