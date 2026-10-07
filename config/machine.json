@@ -1,5 +1,5 @@
 {
-  "cut_feed": 300.0,
+  "cut_feed": 150.0,
   "homing": {
     "auto": true,
     "enabled": true,
@@ -58,5 +58,5 @@
   },
   "warmup_s": 3.0,
   "wire_fixed_tower": 2,
-  "wire_power": 153
+  "wire_power": 208
 }

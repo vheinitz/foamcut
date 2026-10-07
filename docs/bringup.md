@@ -65,9 +65,11 @@ Tastatur im Jog: `a/d` X, `s/w` Y, `j/l` U, `k/i` V, `1`..`4` Schrittweite
 (Verbindung, Jog-Pads beider Türme, Referenz, Verfahrweg, Endschalter,
 Heizdraht und Schnittwerte; hier stehen auch Turmabstand und der Turm mit
 dem festen Draht – sie gelten für alle Entwürfe), **Flügel** (Schritte links, Zeichnung rechts live, Warnungen
-inline, letzte Werte gemerkt; als Profil geht ein Dateiname aus `airfoil/`
-oder direkt eine vierstellige **NACA-Nummer** – `2412` oder `naca2412`, die
-Software rechnet das Profil daraus (Hinterkante geschlossen); Schritt *Block* nennt Mindestblock und
+inline, letzte Werte gemerkt; als Profil geht ein Dateiname aus `airfoil/`,
+eine vierstellige **NACA-Nummer** (`2412`, `naca2412`) oder **die drei Zahlen
+selbst** – `2 40 12` = Wölbung %, Wölbungsrücklage % der Tiefe, Dicke %; damit
+auch Zwischenwerte wie `2.5 40 11.5`, die keine Nummer trifft. Die Software
+rechnet das Profil daraus (Hinterkante geschlossen); Schritt *Block* nennt Mindestblock und
 Tischhöhe/-ausdehnung; Schritt *Holme* hat sechs Zeilen für Nuten und
 Löcher, je eine Leiste, jede mit einem Häkchen ein- und ausschaltbar (der Wert
 bleibt stehen; in der Datei steht dann „aus“ davor). Format für Flügel **und**

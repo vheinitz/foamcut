@@ -50,7 +50,8 @@ class DesignPage(QWidget):
 
         airfoils = sorted(p.name for p in airfoil_dir.glob("*.dat")) if airfoil_dir.exists() else []
         # a NACA number may be typed straight in; these are the usual suspects
-        airfoils = ["naca0012", "naca2412", "naca3412", "naca4412", "naca6409"] + airfoils
+        airfoils = ["naca0012", "naca2412", "naca3412", "naca4412", "naca6409",
+                    "2 40 12", "2.5 40 11.5"] + airfoils
         saved = state.get(model.key, {})
         cat = field_catalogue(model.fields)
 
