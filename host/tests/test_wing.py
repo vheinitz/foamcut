@@ -6,7 +6,7 @@ import pytest
 from foamcut import airfoil as af
 from foamcut import gcode as gc
 from foamcut.machine import Machine
-from foamcut.wing import TEMPLATE, WingError, WingSpec, build_path, generate
+from foamcut.wing import TEMPLATE, WingError, WingSpec, build_path, generate, cuts_ribs, rib_paths
 
 ROOT = Path(__file__).resolve().parents[2]
 AIRFOILS = ROOT / "airfoil"
@@ -716,3 +716,56 @@ def test_a_wing_from_three_numbers_cuts_like_its_four_digit_twin():
     a = build_path(spec(root_airfoil="2412"), machine(kerf=0.0), AIRFOILS)
     b = build_path(spec(root_airfoil="2 40 12"), machine(kerf=0.0), AIRFOILS)
     assert a.root == b.root and a.tip == b.tip
+
+
+# ---------------------------------------------------------------- Rippen ----
+def test_rib_mode_cuts_one_rib_per_piece_with_the_chord_of_its_station():
+    s = spec(root_chord=100.0, tip_chord=60.0, panel=400.0, washout=3.0)
+    s.mode = "Rippen"; s.ribs = 5; s.rib_thick = 6.0
+    code, path = generate(s, machine(kerf=0.0), AIRFOILS)
+    assert len(path.programs) == 5 and code == path.programs[0][1]
+    assert [n for n, _ in path.programs][0].endswith("_rippe1.nc")
+    paths = rib_paths(s, machine(kerf=0.0), AIRFOILS)
+    chords = [max(q[0] for q in p.root) - min(q[0] for q in p.root) for p in paths]
+    assert chords[0] == pytest.approx(100.0, abs=0.2) and chords[-1] == pytest.approx(60.0, abs=0.2)
+    assert chords == sorted(chords, reverse=True)            # evenly shrinking from root to tip
+    for p in paths:
+        assert p.root == p.tip                               # thin rib: both towers run together
+        assert abs(p.block_s[1] - p.block_s[0]) == pytest.approx(6.0)     # the piece is the rib
+    for k, (_, prog) in enumerate(path.programs, start=1):
+        assert f"RIPPE {k} von 5 EINLEGEN" in prog and prog.splitlines()[-1] == "M2"
+        assert not gc.Program.parse(prog).errors
+
+
+def test_a_rib_spar_slot_keeps_its_size_while_the_rib_shrinks():
+    """A wooden strip does not get thinner with the rib, so the slot must not
+    scale with the chord - only its place follows the shape."""
+    from itertools import combinations
+    from foamcut import airfoil as af
+    from foamcut.wing import _profile_mm, apply_spars, parse_spars
+    s = spec()
+    _, up, lo = af.load(AIRFOILS / s.root_airfoil)
+    loop = af.resample_loop(up, lo, s.points)
+    for chord in (100.0, 50.0):
+        prof = _profile_mm(loop, chord, 0.0, 0.0, 0.0, 0.0, None)
+        outer, _, keys = apply_spars(prof, chord, 0.0, parse_spars("0 6x4"), holes=False)
+        corners = [outer[k] for k in keys]
+        assert len(corners) == 4
+        # of the six distances between the corners, two are the depth (4 mm),
+        # two the width (6 mm) and two the diagonals
+        d = sorted(math.dist(a, b) for a, b in combinations(corners, 2))
+        assert d[0] == pytest.approx(4.0, abs=1e-6) and d[2] == pytest.approx(6.0, abs=1e-6)
+    tip = rib_paths(spec_ribs := _ribspec(), machine(kerf=0.0), AIRFOILS)[-1]
+    assert max(q[0] for q in tip.root) - min(q[0] for q in tip.root) < 60.1     # the rib did shrink
+
+
+def _ribspec():
+    s = spec(root_chord=100.0, tip_chord=50.0, panel=400.0)
+    s.mode = "Rippen"; s.ribs = 2; s.rib_thick = 5.0; s.holm1 = "0 6x4"
+    return s
+
+
+def test_whole_panel_stays_the_default():
+    assert not cuts_ribs(spec())
+    code, path = generate(spec(), machine(), AIRFOILS)
+    assert not path.programs and "rib" not in code.splitlines()[0]

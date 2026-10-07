@@ -70,7 +70,14 @@ eine vierstellige **NACA-Nummer** (`2412`, `naca2412`) oder **die drei Zahlen
 selbst** – `2 40 12` = Wölbung %, Wölbungsrücklage % der Tiefe, Dicke %; damit
 auch Zwischenwerte wie `2.5 40 11.5`, die keine Nummer trifft. Die Software
 rechnet das Profil daraus (Hinterkante geschlossen); Schritt *Block* nennt Mindestblock und
-Tischhöhe/-ausdehnung; Schritt *Holme* hat sechs Zeilen für Nuten und
+Tischhöhe/-ausdehnung; Schritt *Rippen* schaltet zwischen **ganzes Teil**
+(der Flügel am Stück, Wurzel- und Endprofil an je einem Turm) und **Rippen**:
+dann entsteht ein Programm je Rippe, gleichmäßig über die Panellänge verteilt,
+jede aus einem eigenen Stück Styropor – vor jeder sagt die Programmseite, wie groß
+es sein muss, und lädt die nächste erst auf Knopfdruck. Beide Türme fahren dabei
+gleich (die Rippe ist dünn, ihre Neigung bei Zuspitzung wird vernachlässigt),
+aber jede Rippe bekommt Tiefe und Schränkung ihrer Stelle; Holmnuten behalten
+ihr Maß, eine Leiste wird ja nicht dünner. Schritt *Holme* hat sechs Zeilen für Nuten und
 Löcher, je eine Leiste, jede mit einem Häkchen ein- und ausschaltbar (der Wert
 bleibt stehen; in der Datei steht dann „aus“ davor). Format für Flügel **und**
 Formen gleich: **`<Winkel> [innen] <b>x<h>`** – Winkel in Grad um die Mitte des

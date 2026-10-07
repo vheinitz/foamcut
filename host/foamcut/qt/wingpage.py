@@ -366,10 +366,12 @@ class DesignPage(QWidget):
         p, _ = QFileDialog.getSaveFileName(self, "G-Code speichern", self.state.get("last_dir", "gcode"), "G-Code (*.nc)")
         if p:
             programs = list(getattr(self.path, "programs", []) or [])
-            if len(programs) > 1:                       # one file per board: name_platte1.nc, _platte2.nc, ...
-                for k, (_, code) in enumerate(programs, start=1):
-                    Path(p).with_name(f"{Path(p).stem}_platte{k}.nc").write_text(code)
-                self.log(f"{len(programs)} Dateien gespeichert: {Path(p).stem}_platte1..{len(programs)}.nc")
+            if len(programs) > 1:                       # one file per board / per rib
+                stem = Path(p).stem
+                for k, (name, code) in enumerate(programs, start=1):
+                    tail = name.rsplit("_", 1)[-1] if "_" in name else f"{k}.nc"
+                    Path(p).with_name(f"{stem}_{tail}").write_text(code)
+                self.log(f"{len(programs)} Dateien gespeichert: {stem}_* ({len(programs)} Stueck)")
             Path(p).write_text(self.gcode); self.state.set("last_dir", str(Path(p).parent))
             self.sent = self.gcode
             self.gcode_ready.emit(self.gcode, Path(p).name)

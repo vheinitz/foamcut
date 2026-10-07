@@ -15,6 +15,7 @@ The spec is plain text, `key = value` per line, see TEMPLATE.
 """
 from __future__ import annotations
 
+import copy
 import math
 import re
 import struct
@@ -87,6 +88,20 @@ FIELDS = [
         ("hinge_v", "Kerbe unten", "mm", "0",
          "Breite der V-Kerbe an der Unterseite, damit das Ruder nach unten ausschlagen kann. "
          "0 = gerader Schlitz (nur Schnittbreite).", "num"),
+    ]),
+    ("rippen", "Rippen", [
+        ("mode", "Was schneiden", "", "ganzes Teil",
+         "Ganzes Teil: der Fluegel wird am Stueck geschnitten, Wurzel- und Endprofil an je einem Turm. "
+         "Rippen: statt des Panels werden einzelne Rippen geschnitten - jede aus einem eigenen Stueck "
+         "Styropor, die Software sagt vor jeder, wie gross es sein muss. Dabei fahren beide Tuerme "
+         "gleich (die Rippe ist duenn, ihre Neigung bei Zuspitzung wird vernachlaessigt), aber jede Rippe "
+         "bekommt die Tiefe und Schraenkung ihrer Stelle. Holmnuten behalten ihr Mass - eine Leiste wird "
+         "ja nicht duenner, nur weil die Rippe kleiner ist.", "choice:ganzes Teil|Rippen"),
+        ("ribs", "Anzahl Rippen", "", "8",
+         "Wie viele Rippen ueber die Panellaenge, gleichmaessig verteilt, die erste an der Wurzel, die "
+         "letzte am Ende.", "int"),
+        ("rib_thick", "Rippendicke", "mm", "5",
+         "Dicke der Rippe = Breite des Styroporstuecks in Spannrichtung.", "num"),
     ]),
     ("holm", "Holme", [
         ("holm1", "Holm 1", "", "",
@@ -205,7 +220,7 @@ TEMPLATE = _template()
 _NUMERIC = {
     "root_chord", "tip_chord", "panel", "area", "taper", "sweep", "washout", "dihedral", "root_gap", "block_x", "te_x",
     "table_y", "chord_y", "lead", "block_s", "block_w", "block_len", "block_y", "block_h",
-    "points", "margin", "aileron", "hinge_skin", "hinge_v",
+    "points", "margin", "aileron", "hinge_skin", "hinge_v", "ribs", "rib_thick",
 }
 _MACHINE_KEYS = {"kerf", "feed", "wire", "warmup"}     # accepted in old files, ignored
 _REQUIRED = {"root_airfoil", "root_chord", "panel", "root_gap", "block_x"}
@@ -263,6 +278,9 @@ class WingSpec:
     block_y: float | None = None        # legacy input: the block bottom used to be free, now it is the table
     block_h: float | None = None
     points: int = 60
+    mode: str = "ganzes Teil"
+    ribs: int = 8
+    rib_thick: float = 5.0
     holm1: str = ""
     holm2: str = ""
     holm3: str = ""
@@ -304,7 +322,7 @@ class WingSpec:
                     num = float(value.replace(",", "."))
                 except ValueError:
                     raise WingError(f"Zeile {n}: {key} braucht eine Zahl, nicht {value!r}") from None
-                setattr(spec, key, int(num) if key == "points" else num)
+                setattr(spec, key, int(num) if key in ("points", "ribs") else num)
             else:
                 setattr(spec, key, value)
             seen.add(key)
@@ -329,6 +347,10 @@ class WingSpec:
             spec.tip_airfoil = spec.root_airfoil
         if spec.points < 8:
             raise WingError("points: mindestens 8")
+        if spec.ribs < 2:
+            raise WingError("ribs: mindestens 2 (Wurzel und Ende)")
+        if spec.rib_thick <= 0:
+            raise WingError("rib_thick muss > 0 sein")
         for k in ("root_chord", "tip_chord", "panel"):
             if getattr(spec, k) <= 0:
                 raise WingError(f"{k} muss > 0 sein")
@@ -808,6 +830,52 @@ def stl_name(spec: WingSpec) -> str:
     return wing_name(spec)[:-3] + ".stl"
 
 
+def cuts_ribs(spec: WingSpec) -> bool:
+    return (spec.mode or "").strip().lower().startswith("rip")
+
+
+def rib_paths(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> list[WingPath]:
+    """One path per rib. A rib is thin, so both towers cut the same outline -
+    its slant at a tapered wing is ignored on purpose; what does follow the
+    span is the chord, the twist and the sweep of its station. Spar slots keep
+    their size: a wooden strip does not get thinner with the rib."""
+    _, r_up, r_lo = _surfaces(spec.root_airfoil, airfoil_dir)
+    _, t_up, t_lo = _surfaces(spec.tip_airfoil or spec.root_airfoil, airfoil_dir)
+    loop_r = af.resample_loop(r_up, r_lo, spec.points)
+    loop_t = af.resample_loop(t_up, t_lo, spec.points)
+    spars = spar_list(spec)
+    ail = (spec.aileron, spec.hinge_skin, spec.hinge_v) if spec.aileron > 0 else None
+    n = max(2, int(spec.ribs))
+    out: list[WingPath] = []
+    for k in range(n):
+        f = k / (n - 1)
+        chord = spec.root_chord + (spec.tip_chord - spec.root_chord) * f
+        # the two airfoils share their x stations, so they blend point for point
+        loop = [(ax + (bx - ax) * f, ay + (by - ay) * f) for (ax, ay), (bx, by) in zip(loop_r, loop_t)]
+        te_x = spec.block_x + spec.lead
+        prof = _profile_mm(loop, chord, te_x, 0.0, spec.washout * f, machine.kerf_mm, ail)
+        if spars:
+            prof, _, _ = apply_spars(prof, chord, te_x, spars, holes=False, kerf=machine.kerf_mm)
+        if spec.mirror:
+            prof = [(x, -y) for x, y in prof]
+        rib = copy.copy(spec)
+        rib.panel = spec.rib_thick
+        rib.block_s = rib.block_len = rib.block_h = None
+        rib.block_w = spec.rib_thick          # the piece is exactly as thick as the rib
+        path = loft(rib, prof, list(prof), machine, mirrored=spec.mirror)
+        path.notes.insert(1, f"Rippe {k + 1} von {n} bei {spec.panel * f:.0f} mm ab der Wurzel, "
+                             f"Tiefe {chord:.1f} mm" + (f", Schraenkung {spec.washout * f:.1f} deg"
+                                                        if spec.washout else ""))
+        out.append(path)
+    return out
+
+
+def rib_prompt(path: WingPath, k: int, n: int) -> str:
+    bx, by, bl, bh, _, bw = path.min_block
+    return (f"RIPPE {k} von {n} EINLEGEN: Styropor mind. {bl:.0f} x {bh:.0f} x {bw:.0f} mm "
+            f"(Laenge x Hoehe x Dicke), Rueckseite X={bx:g}, Unterkante Y={by:.0f}")
+
+
 def wing_name(spec: WingSpec) -> str:
     """File name for a generated program, e.g. clarky_100-80_400.nc / ..._sp.nc."""
     return (f"{spec.root_airfoil.rsplit('.', 1)[0]}_{spec.root_chord:g}-{spec.tip_chord:g}_{spec.panel:g}"
@@ -922,6 +990,8 @@ def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: li
 
 
 def generate(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> tuple[str, WingPath]:
+    if cuts_ribs(spec):
+        return _generate_ribs(spec, machine, airfoil_dir)
     path = build_path(spec, machine, airfoil_dir)
     header = [
         f"; foamcut wing: {spec.root_airfoil} {spec.root_chord:g} -> "
@@ -931,6 +1001,31 @@ def generate(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> tuple[str, 
         f"Vorschub {machine.cut_feed:g} mm/min",
     ]
     return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header), path
+
+
+def _generate_ribs(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> tuple[str, WingPath]:
+    """One complete program per rib - each comes out of its own piece of foam,
+    so the next one is only loaded once the user has put it in."""
+    paths = rib_paths(spec, machine, airfoil_dir)
+    n = len(paths)
+    first = paths[0]
+    stem = wing_name(spec)[:-3]
+    total = 0.0
+    for k, path in enumerate(paths, start=1):
+        header = [f"; foamcut wing rib {k}/{n}: " + path.notes[1],
+                  "; " + rib_prompt(path, k, n),
+                  f"; Kerf {machine.kerf_mm:g}, Vorschub {machine.cut_feed:g} mm/min, "
+                  f"beide Tuerme gleich (Rippe)"]
+        code = emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header)
+        total += contour_moves(path, machine.cut_feed)[1]
+        first.programs.append((f"{stem}_rippe{k}.nc", code))
+        if k > 1:
+            first.notes.append(path.notes[1] + f"; Styropor {path.min_block[2]:.0f} x {path.min_block[3]:.0f} x "
+                                               f"{path.min_block[5]:.0f} mm")
+    first.notes.insert(1, f"Rippenmodus: {n} Rippen, je {spec.rib_thick:g} mm dick, "
+                          f"ein Programm je Rippe - die Software fragt vor jeder nach dem Styroporstueck")
+    first.notes.append(f"Schnittzeit ca. {total:.1f} min fuer alle {n} Rippen")
+    return first.programs[0][1], first
 
 
 def _wing_values_from_file(self, text: str, machine: Machine, airfoil_dir: Path) -> dict[str, str]:
