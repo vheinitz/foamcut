@@ -684,3 +684,35 @@ def test_an_empty_tip_profile_falls_back_to_the_root_one():
     from foamcut import airfoil as af
     with pytest.raises(ValueError, match="kein Profil angegeben"):
         af.surfaces("", AIRFOILS)
+
+
+def test_naca_can_be_given_as_its_three_numbers():
+    from foamcut import airfoil as af
+    xs = [k / 200 for k in range(201)]
+
+    def measure(name):
+        _, up, lo = af.surfaces(name, AIRFOILS)
+        thick = max(af._interp(up, x) - af._interp(lo, x) for x in xs)
+        camber = max((af._interp(up, x) + af._interp(lo, x)) / 2 for x in xs)
+        at = max(((af._interp(up, x) + af._interp(lo, x)) / 2, x) for x in xs)[1]
+        return thick * 100, camber * 100, at * 100
+    assert af.naca_params("2 40 12") == (2.0, 40.0, 12.0)
+    assert af.naca_params("2412") == (2.0, 40.0, 12.0)
+    assert af.naca_params("2.5/40/11.5") == (2.5, 40.0, 11.5)
+    assert af.naca_params("clarky.dat") is None
+    assert measure("2 40 12") == pytest.approx(measure("2412"), abs=1e-9)     # same profile either way
+    t, c, at = measure("2.5 40 11.5")                        # values no four digit code can name
+    assert t == pytest.approx(11.5, abs=0.05) and c == pytest.approx(2.5, abs=0.05)
+    assert at == pytest.approx(40.0, abs=2.0)
+    assert af.surfaces("3 30 10", AIRFOILS)[0] == "NACA 3310"
+    assert af.surfaces("2.5 40 11.5", AIRFOILS)[0] == "NACA 2.5-40-11.5"
+    with pytest.raises(ValueError, match="Dicke"):
+        af.naca(2.0, 40.0, 0.0)
+    with pytest.raises(ValueError, match="Woelbungsruecklage"):
+        af.naca(2.0, 0.0, 12.0)
+
+
+def test_a_wing_from_three_numbers_cuts_like_its_four_digit_twin():
+    a = build_path(spec(root_airfoil="2412"), machine(kerf=0.0), AIRFOILS)
+    b = build_path(spec(root_airfoil="2 40 12"), machine(kerf=0.0), AIRFOILS)
+    assert a.root == b.root and a.tip == b.tip

@@ -147,26 +147,44 @@ NACA5_RE = re.compile(r"^\s*(?:naca[\s-]*)?(\d{5})\s*$", re.IGNORECASE)
 NACA_STATIONS = 200        # points per surface when a profile is computed
 
 
-def naca4(code: str, n: int = NACA_STATIONS) -> tuple[str, Surface, Surface]:
-    """A four digit NACA profile from its numbers, no data file needed.
+NACA_PARAMS_RE = re.compile(r"^\s*(?:naca[\s-]*)?([\d.,]+)\s*[\s/-]\s*([\d.,]+)\s*[\s/-]\s*([\d.,]+)\s*$",
+                            re.IGNORECASE)
 
-    2412 = 2 % camber at 40 % of the chord, 12 % thick. The trailing edge is
-    closed (last thickness coefficient 0.1036 instead of 0.1015) - a hot wire
-    cannot cut the open one that the original formula leaves.
+
+def naca_params(name: str) -> tuple[float, float, float] | None:
+    """The three numbers of a four digit NACA profile, in percent of the chord:
+    camber, where it sits, thickness. Written either as the digits (2412) or
+    as the numbers themselves (2 40 12), the latter with decimals if you like
+    (2.5 40 11.5 is a profile no four digit code can name)."""
+    m = NACA_RE.match(name or "")
+    if m:
+        d = m.group(1)
+        return float(d[0]), float(d[1]) * 10.0, float(d[2:])
+    m = NACA_PARAMS_RE.match(name or "")
+    if m:
+        num = lambda t: float(t.replace(",", "."))
+        return num(m.group(1)), num(m.group(2)), num(m.group(3))
+    return None
+
+
+def naca(camber: float, pos: float, thick: float, n: int = NACA_STATIONS) -> tuple[str, Surface, Surface]:
+    """A NACA four digit profile from its three numbers, all in percent of the
+    chord: `camber` height of the camber line, `pos` where that maximum sits,
+    `thick` thickness. The trailing edge is closed (last coefficient 0.1036
+    instead of 0.1015) - a hot wire cannot cut the open one the original
+    formula leaves.
     """
-    m = NACA_RE.match(code)
-    if not m:
-        raise ValueError(f"{code!r} ist keine vierstellige NACA-Nummer")
-    d = m.group(1)
-    mc, p, tt = int(d[0]) / 100.0, int(d[1]) / 10.0, int(d[2:]) / 100.0
+    mc, p, tt = camber / 100.0, pos / 100.0, thick / 100.0
     if tt <= 0:
-        raise ValueError(f"NACA {d}: Dicke 00 gibt es nicht")
+        raise ValueError("NACA: die Dicke muss > 0 sein")
+    if mc > 0 and not 0 < p < 1:
+        raise ValueError("NACA: die Woelbungsruecklage muss zwischen 0 und 100 % liegen")
     upper: Surface = []
     lower: Surface = []
     for x in cosine_spacing(n):
         yt = 5 * tt * (0.2969 * math.sqrt(x) - 0.1260 * x - 0.3516 * x ** 2
                        + 0.2843 * x ** 3 - 0.1036 * x ** 4)
-        if mc > 0 and 0 < p < 1:
+        if mc > 0:
             if x < p:
                 yc = mc / p ** 2 * (2 * p * x - x ** 2)
                 dy = 2 * mc / p ** 2 * (p - x)
@@ -182,7 +200,19 @@ def naca4(code: str, n: int = NACA_STATIONS) -> tuple[str, Surface, Surface]:
     # the same stations, so two profiles still pair point for point
     upper = _normalise(sorted(upper))
     lower = _normalise(sorted(lower))
-    return f"NACA {d}", upper, lower
+    fmt = lambda v: f"{v:g}"
+    name = (f"NACA {int(camber)}{int(pos / 10)}{int(thick):02d}"
+            if (camber == int(camber) and pos % 10 == 0 and thick == int(thick) and thick < 100)
+            else f"NACA {fmt(camber)}-{fmt(pos)}-{fmt(thick)}")
+    return name, upper, lower
+
+
+def naca4(code: str, n: int = NACA_STATIONS) -> tuple[str, Surface, Surface]:
+    """A four digit NACA profile from its number, e.g. 2412."""
+    p = naca_params(code)
+    if p is None:
+        raise ValueError(f"{code!r} ist keine NACA-Angabe (vierstellig wie 2412 oder drei Zahlen wie 2 40 12)")
+    return naca(*p, n=n)
 
 
 def is_naca(name: str) -> bool:
@@ -190,10 +220,11 @@ def is_naca(name: str) -> bool:
 
 
 def surfaces(name: str, airfoil_dir: Path) -> tuple[str, Surface, Surface]:
-    """A profile by name: a four digit NACA number is computed, anything else
-    is looked up as a file in `airfoil_dir`."""
-    if NACA_RE.match(name or ""):
-        return naca4(name)
+    """A profile by name: a NACA number (2412) or its three numbers (2 40 12)
+    is computed, anything else is looked up as a file in `airfoil_dir`."""
+    pars = naca_params(name)
+    if pars is not None:
+        return naca(*pars)
     if NACA5_RE.match(name or ""):
         raise ValueError(f"{name.strip()}: fuenfstellige NACA-Profile rechnet foamcut nicht - "
                          "als .dat in airfoil/ ablegen")

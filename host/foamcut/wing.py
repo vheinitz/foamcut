@@ -40,14 +40,15 @@ SPAR_HELP = ("'<Winkel> [innen] <b>x<h>'. Winkel in Grad um die Mitte des Quersc
 FIELDS = [
     ("profil", "Profil", [
         ("root_airfoil", "Profil an der Wurzel", "", "clarky.dat",
-         "Profil fuer die Rumpfseite: Dateiname aus airfoil/ (.dat, Selig oder Lednicer) oder eine "
-         "vierstellige NACA-Nummer, die foamcut selbst ausrechnet - '2412' oder 'naca2412' "
-         "(2 % Woelbung bei 40 % der Tiefe, 12 % dick; 0012 ist symmetrisch). Die Hinterkante wird "
-         "geschlossen gerechnet, der Draht kann keine offene schneiden.", "airfoil"),
+         "Profil fuer die Rumpfseite - dreierlei moeglich: ein Dateiname aus airfoil/ (.dat, Selig oder "
+         "Lednicer); eine vierstellige NACA-Nummer, '2412' oder 'naca2412'; oder die drei Zahlen selbst, "
+         "'2 40 12' (Woelbung %, Woelbungsruecklage % der Tiefe, Dicke %) - so gehen auch Zwischenwerte, "
+         "die keine Nummer trifft, etwa '2.5 40 11.5'. 0012 bzw. '0 0 12' ist symmetrisch. Die Hinterkante "
+         "wird geschlossen gerechnet, der Draht kann keine offene schneiden.", "airfoil"),
         ("root_chord", "Wurzeltiefe", "mm", "100",
          "Profiltiefe (Sehnenlaenge) an der Wurzel, Nasenleiste bis Hinterkante.", "num"),
         ("tip_airfoil", "Profil am Ende", "", "",
-         "Profil fuer das aeussere Ende, Datei oder NACA-Nummer wie an der Wurzel. "
+         "Profil fuer das aeussere Ende: Datei, NACA-Nummer oder die drei Zahlen, wie an der Wurzel. "
          "Leer = gleiches Profil wie an der Wurzel.", "airfoil"),
         ("tip_chord", "Endtiefe", "mm", "80",
          "Profiltiefe am aeusseren Ende. Gleich der Wurzeltiefe = Rechteckfluegel.", "num"),
