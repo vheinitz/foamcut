@@ -197,9 +197,11 @@ def surfaces(name: str, airfoil_dir: Path) -> tuple[str, Surface, Surface]:
     if NACA5_RE.match(name or ""):
         raise ValueError(f"{name.strip()}: fuenfstellige NACA-Profile rechnet foamcut nicht - "
                          "als .dat in airfoil/ ablegen")
+    if not (name or "").strip():
+        raise ValueError("kein Profil angegeben (Dateiname aus airfoil/ oder eine NACA-Nummer wie 2412)")
     p = Path(name)
     for cand in (p, airfoil_dir / name, airfoil_dir / f"{name}.dat"):
-        if cand.exists():
+        if cand.is_file():
             return load(cand)
     raise ValueError(f"Profil nicht gefunden: {name} (gesucht in {airfoil_dir}; "
                      "eine NACA-Nummer wie 2412 geht auch direkt)")

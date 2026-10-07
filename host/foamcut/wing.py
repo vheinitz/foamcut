@@ -684,7 +684,7 @@ def loft(spec, root: list[Point], tip: list[Point], machine: Machine, mirrored: 
 
 def build_path(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> WingPath:
     _, r_up, r_lo = _surfaces(spec.root_airfoil, airfoil_dir)
-    _, t_up, t_lo = _surfaces(spec.tip_airfoil, airfoil_dir)
+    _, t_up, t_lo = _surfaces(spec.tip_airfoil or spec.root_airfoil, airfoil_dir)
     loop_r = af.resample_loop(r_up, r_lo, spec.points)
     loop_t = af.resample_loop(t_up, t_lo, spec.points)
 
@@ -924,7 +924,7 @@ def generate(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> tuple[str, 
     path = build_path(spec, machine, airfoil_dir)
     header = [
         f"; foamcut wing: {spec.root_airfoil} {spec.root_chord:g} -> "
-        f"{spec.tip_airfoil} {spec.tip_chord:g}, Panel {spec.panel:g}"
+        f"{spec.tip_airfoil or spec.root_airfoil} {spec.tip_chord:g}, Panel {spec.panel:g}"
         + (", spiegelverkehrt" if spec.mirror else "") + (f", Ruder {spec.aileron:g} %" if spec.aileron > 0 else ""),
         f"; Pfeilung {spec.sweep:g}, Schraenkung {spec.washout:g} deg, Kerf {machine.kerf_mm:g}, "
         f"Vorschub {machine.cut_feed:g} mm/min",
