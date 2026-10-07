@@ -116,7 +116,8 @@ class ProgramPage(QWidget):
     def _show_next_hint(self):
         if self.queue:
             prompt = self._prompt_of(self.queue[0][1])
-            self.b_next.setText(f"Nächste Platte laden… ({len(self.queue)} weitere)"); self.b_next.show()
+            what = prompt.split()[0].capitalize() if prompt[:1].isalpha() else "Platte"
+            self.b_next.setText(f"Nächste {what} laden… ({len(self.queue)} weitere)"); self.b_next.show()
             self.b_next.setToolTip(prompt)
         else:
             self.b_next.hide()
