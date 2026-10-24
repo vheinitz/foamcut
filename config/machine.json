@@ -1,5 +1,5 @@
 {
-  "cut_feed": 150.0,
+  "cut_feed": 350.0,
   "homing": {
     "auto": true,
     "enabled": true,
