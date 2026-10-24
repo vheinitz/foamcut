@@ -17,7 +17,7 @@ from . import setup as wiz
 from .grbl import Grbl, GrblAlarm, GrblError
 from . import homing as hm
 from .machine import DEFAULT_PATH as MACHINE_PATH
-from .machine import Machine
+from .machine import Machine, rate_cap
 from .link import LinkError, find_port, list_ports, open_link
 
 DEFAULT_PORT = "auto"
@@ -396,7 +396,13 @@ def cmd_machine(args) -> int:
             except ValueError:
                 print(f"error: --steps erwartet ACHSE=WERT, z.B. Y=17408 (nicht {item!r})", file=sys.stderr)
                 return 2
+            # A max_rate sitting exactly on the old step ceiling was derived
+            # from it, not chosen by hand - let it follow, or going from a fine
+            # microstep back to a coarse one leaves the axis just as slow.
+            derived = abs(m.max_rate[a] - rate_cap(m.steps_per_mm[a])) < 0.05
             m.steps_per_mm[a] = float(v)
+            if derived:
+                m.max_rate[a] = rate_cap(m.steps_per_mm[a])
         if args.kerf is not None:
             if args.kerf < 0:
                 print("error: kerf muss >= 0 sein", file=sys.stderr)

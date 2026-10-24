@@ -314,8 +314,8 @@ Das ist keine Kleinigkeit. Die Schrittrate deckelt die Achse hart:
 |---|---|---|
 | 1/32 | 17408 | **68,9 mm/min** |
 | 1/16 | 8704 | 137,9 |
-| 1/8 | 4352 | 275,9 |
-| 1/4 | 2176 | 551,7 |
+| 1/8 | 4352 | 275,7 |
+| 1/4 | 2176 | 551,5 |
 
 grbl sagt dazu nichts: es rechnet jede Bewegung auf ihre langsamste Achse
 herunter und fährt sie einfach länger. Ein `F` für 550 mm/min ist dann ein

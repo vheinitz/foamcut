@@ -71,3 +71,27 @@ def test_machine_set_steps_per_mm_and_clamps_the_rate(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Y 17408" in out
     assert main(["--machine", str(mpath), "machine", "set", "--steps", "Q=1"]) == 2
+
+
+def test_coarser_microstepping_gives_the_rate_back(tmp_path):
+    # Going 1/32 -> 1/8 on Y/V is the whole point of the exercise: halve the
+    # steps and the axis must be allowed to run faster again, otherwise the
+    # wire still crawls through a spar slot and melts it wide.
+    from foamcut.machine import Machine
+    mpath = tmp_path / "machine.json"
+    Machine().save(mpath)
+    main(["--machine", str(mpath), "machine", "set", "--steps", "Y=17408", "--steps", "V=17408"])
+    assert Machine.load(mpath).max_rate["Y"] == pytest.approx(68.9, abs=0.1)
+    main(["--machine", str(mpath), "machine", "set", "--steps", "Y=4352", "--steps", "V=4352"])
+    m = Machine.load(mpath)
+    assert m.max_rate["Y"] == m.max_rate["V"] == pytest.approx(275.7, abs=0.1)
+    assert m.slow_axes(250.0) == []
+
+
+def test_a_hand_set_rate_is_not_raised_behind_your_back(tmp_path):
+    from foamcut.machine import Machine
+    mpath = tmp_path / "machine.json"
+    m = Machine(); m.steps_per_mm["Y"] = 17408.0; m.max_rate["Y"] = 40.0   # chosen, not derived
+    m.save(mpath)
+    main(["--machine", str(mpath), "machine", "set", "--steps", "Y=4352"])
+    assert Machine.load(mpath).max_rate["Y"] == 40.0
