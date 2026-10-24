@@ -171,11 +171,11 @@ Maschine oder der Messstelle (ein Trapez ist alle 10 cm ~1 cm anders breit).
 `table_y`; nur waagerecht (Länge, Spannbereich) sind Block und Tisch getrennt.
 Alte `.wing`/`.shape` mit `block_y` werden umgerechnet.
 
-**U läuft mit 3200 Schritten/mm** (Treiber im Z-Slot steht auf 1/32,
-Lineal-Test 16.09.): so steht es jetzt in `machine.json`; ein Rechteckflügel
-wurde vorher als Trapez geschnitten, weil U nur halb so weit fuhr. Jumper auf
-1/16 umstecken und `foamcut setup --phases scale --jog-mm 50 --axes U` gäbe U
-wieder 750 mm/min statt 375.
+**U läuft mit 3200 Schritten/mm** (Lineal-Test 16.09.): so steht es in
+`machine.json`; ein Rechteckflügel wurde vorher als Trapez geschnitten, weil U
+nur halb so weit fuhr. Der Grund ist der Mikroschritt, siehe unten — X und U
+haben dieselbe Mechanik (4 mm je Motorumdrehung), laufen aber auf verschiedenen
+Treibermodulen und damit verschieden fein.
 
 **Nach jedem Einschalten:** `foamcut ref` oder in der GUI „Referenz hier setzen". grbl weiß nach einem Neustart nicht
 mehr, wo es steht — die Referenzecke einmal anfahren, Enter, fertig. Danach
@@ -306,22 +306,51 @@ Geschwindigkeit behalten will, stellt stattdessen den Treiber zurück auf den
 angenommenen Mikroschritt (Jumper MS1/MS2 unter dem Treiber) und lässt den
 alten Wert stehen.
 
+### TMC2209: die Tabelle geht nicht der Reihe nach
+
+Verbaut sind **TMC2209** im Standalone-Betrieb (zwei Module V2, zwei V3), nicht
+A4988. Deren Mikroschritt-Tabelle ist nicht monoton, und genau daran verrechnet
+man sich:
+
+| MS2 | MS1 | Mikroschritt |
+|---|---|---|
+| aus | aus | **1/8** |
+| aus | an | 1/32 |
+| an | aus | **1/64** |
+| an | an | 1/16 |
+
+Ein Jumper *mehr* ist also nicht automatisch feiner: nur MS2 gesteckt ist der
+feinste Modus von allen, beide Jumper ab der gröbste. Die A4988-Tabelle (aus,
+an, aus = 1/4) gilt hier nicht, und 1/32 oder 1/64 kann ein A4988 ohnehin nicht.
+
+Entscheidend für diese Maschine: der TMC2209 interpoliert intern immer auf 256
+Mikroschritte (MicroPlyer), unabhängig von MS1/MS2. Gröber einstellen kostet
+hier also **keine Laufruhe** — nur die Auflösung der Schrittimpulse sinkt, und
+die ist bei 2176 Schritten/mm (0,46 µm) für einen Draht mit 1 mm Schnittspalt
+immer noch um Größenordnungen feiner als nötig. Bei einem A4988 wäre derselbe
+Schritt mit rauerem Lauf bezahlt worden; hier ist er umsonst zu haben.
+
+Und weil V2 und V3 bei gleicher Jumperstellung verschieden belegt sein können,
+gilt die Tabelle pro Modul: X (1600 Schritte/mm) und U (3200) haben mit 4 mm je
+Motorumdrehung dieselbe Mechanik, laufen aber auf 1/32 bzw. 1/64. Nach jedem
+Umstecken deshalb Achse für Achse den Lineal-Test.
+
 ### Was die feinen Schritte kosten: breiter Schnitt statt langsamer Schnitt
 
 Das ist keine Kleinigkeit. Die Schrittrate deckelt die Achse hart:
 
 | Y/V-Mikroschritt | Schritte/mm | höchster Vorschub |
 |---|---|---|
-| 1/32 | 17408 | **68,9 mm/min** |
-| 1/16 | 8704 | 137,9 |
-| 1/8 | 4352 | 275,7 |
-| 1/4 | 2176 | 551,5 |
+| 1/64 (Stand 24.10.) | 17408 | **68,9 mm/min** |
+| 1/32 | 8704 | 137,9 |
+| 1/16 | 4352 | 275,7 |
+| 1/8 | 2176 | 551,5 |
 
 grbl sagt dazu nichts: es rechnet jede Bewegung auf ihre langsamste Achse
 herunter und fährt sie einfach länger. Ein `F` für 550 mm/min ist dann ein
 Wunsch, kein Vorschub. Beim Fräsen wäre das nur langsam — beim Heißdraht
 ändert es das Werkstück, weil der Draht an der Stelle länger steht und
-breiter schmilzt. Mit Y/V auf 1/32 und 550 mm/min Schnittvorschub laufen bei
+breiter schmilzt. Mit Y/V auf 1/64 und 550 mm/min Schnittvorschub laufen bei
 einem Clark-Y-Panel **122 von 124 Segmenten** gedrosselt, an der steilsten
 Stelle (Holmnut, senkrecht in die Haut) um Faktor 8. Der Schnittspalt ist dann
 nicht mehr der gemessene Kerf, sondern wandert mit der Bahnrichtung.
