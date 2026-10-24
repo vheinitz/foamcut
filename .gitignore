@@ -8,3 +8,4 @@ motor_test/build/
 firmware/endstop_test/.pio/
 config/ui_state.json
 *.png
+*.egg-info/

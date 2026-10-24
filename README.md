@@ -5,7 +5,7 @@ GT2560. Two independent towers, four axes: **X/Y** on the left tower, **U/V**
 on the right. Firmware is [grbl-Mega-5X](https://github.com/fra589/grbl-Mega-5X)
 with a GT2560 pin map written for this project.
 
-Nothing here needs the machine to exist yet — `make test` runs 77 checks
+Nothing here needs the machine to exist yet — `make test` runs 331 tests
 offline, including a cross-check that the two firmwares' pin maps describe the
 same physical board.
 
@@ -33,9 +33,9 @@ is [`gt2560_motortest/`](gt2560_motortest/). See
 **Not Marlin.** Marlin plans one E axis per move, so `X Y Z E` gives you four
 simultaneous axes only if you accept that the fourth is an extruder with
 extruder semantics — `M92`/`T0`/`M83`, no `U`/`V` letters, no `G28` per tower,
-and no G-code generator that emits it. The `Marlin/` tree here is configured
-that way (`EXTRUDERS 2`, `BOARD_GT2560_REV_A_PLUS`) and is kept as a reference,
-but a foam cutter wants XYUV, not XYZE.
+and no G-code generator that emits it. A Marlin build configured that way
+(`EXTRUDERS 2`, `BOARD_GT2560_REV_A_PLUS`) was tried and dropped; it is not
+part of this repository. A foam cutter wants XYUV, not XYZE.
 
 **Not the reference repo's firmware.** [rahulsarchive/4AxisFoamCutter](https://github.com/rahulsarchive/4AxisFoamCutter)
 is a good build log and its notes on wire temperature, feed rate and G-code
