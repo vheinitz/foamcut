@@ -931,13 +931,29 @@ def _w(p1: Point, p2: Point) -> str:
     return f"X{p1[0]:.3f} Y{p1[1]:.3f} U{p2[0]:.3f} V{p2[1]:.3f}"
 
 
-def contour_moves(path: WingPath, feed: float) -> tuple[list[str], float]:
+def contour_moves(path: WingPath, feed: float,
+                  machine: Machine | None = None) -> tuple[list[str], float, float, float]:
     """G93 (inverse time) moves from the entry point along the contour and
     back to the entry point; the feed applies to the faster of the two cut
-    planes. Returns the lines and the minutes they take."""
+    planes. Returns the lines, the minutes they take, the lowest feed any
+    segment actually reaches, and the minutes the cut would take if no axis
+    limit got in the way.
+
+    A move is only as fast as its slowest axis: grbl scales the whole move
+    down to whatever $110..$113 allow, silently. A segment that runs almost
+    purely in Y - a spar slot goes straight into the skin - is therefore
+    capped at the Y max_rate, which at 17408 steps/mm is 69 mm/min. At a
+    400 mm/min cut feed the wire then dwells six times longer than planned and
+    melts a visibly wider channel. So the segment time comes from the slowest
+    axis, not from the contour length alone; otherwise both the inverse-time F
+    and the cut time estimate are fiction.
+    """
     out: list[str] = []
     total_min = 0.0
+    ideal_min = 0.0
+    slowest = feed
     prev_r, prev_t = path.entry_root, path.entry_tip
+    prev_1, prev_2 = path.entry_t1, path.entry_t2
     contact = [(path.root[0], path.tip[0])] + list(zip(path.root, path.tip))[1:] \
         + [(path.entry_root, path.entry_tip)]
     towers = [(path.tower1[0], path.tower2[0])] + list(zip(path.tower1, path.tower2))[1:] \
@@ -948,13 +964,23 @@ def contour_moves(path: WingPath, feed: float) -> tuple[list[str], float]:
             prev_r, prev_t = pr, pt
             continue
         minutes = seg / feed
+        ideal_min += minutes
+        if machine is not None:
+            for a, d in (("X", abs(p1[0] - prev_1[0])), ("Y", abs(p1[1] - prev_1[1])),
+                         ("U", abs(p2[0] - prev_2[0])), ("V", abs(p2[1] - prev_2[1]))):
+                rate = machine.max_rate.get(a, 0.0)
+                if rate > 0.0 and d > 0.0:
+                    minutes = max(minutes, d / rate)
         total_min += minutes
+        slowest = min(slowest, seg / minutes)
         out.append(f"G1 {_w(p1, p2)} F{1.0 / minutes:.4f}")
         prev_r, prev_t = pr, pt
-    return out, total_min
+        prev_1, prev_2 = p1, p2
+    return out, total_min, slowest, ideal_min
 
 
-def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: list[str]) -> str:
+def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: list[str],
+               machine: Machine | None = None) -> str:
     """The one-pass program for a lofted path: heat, lift, approach, contour
     with inverse-time feed, exit, retreat over the table, lower."""
     s_wire = wire if wire > 0 else 1          # S1 = "use the GUI slider" (translate())
@@ -969,7 +995,7 @@ def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: li
         f"G0 X{path.entry_t1[0]:.3f} U{path.entry_t2[0]:.3f} ; dann vor zur Blockrueckseite",
         "G93 ; inverse Zeit: F = 1/min je Segment",
     ]
-    moves, total_min = contour_moves(path, feed)
+    moves, total_min, slowest, ideal_min = contour_moves(path, feed, machine)
     out += moves
     out += [
         "G94",
@@ -982,6 +1008,17 @@ def emit_gcode(path: WingPath, feed: float, wire: int, warmup: float, header: li
         "M2",
     ]
     path.notes.append(f"Schnittzeit ca. {total_min:.1f} min, {len(path.root)} Stuetzpunkte")
+    if machine is not None and slowest < feed - 0.5:
+        groups: dict[tuple[float, float], list[str]] = {}
+        for a in machine.slow_axes(feed):
+            groups.setdefault((machine.max_rate[a], machine.steps_per_mm[a]), []).append(a)
+        where = "; ".join(f"{'/'.join(ax)} hoechstens {r:g} mm/min ({s:g} Schritte/mm)"
+                          for (r, s), ax in sorted(groups.items()))
+        path.notes.append(
+            f"ZU LANGSAM: {total_min:.1f} statt {ideal_min:.1f} min, einzelne Stellen laufen mit nur "
+            f"{slowest:.0f} statt {feed:g} mm/min"
+            + (f" - {where}" if where else "") + ". Wo der Draht langsamer faehrt, schmilzt er"
+            " breiter: der Schnittspalt weicht dort vom eingestellten Kerf ab.")
     mb = path.min_block
     out.insert(1, job_line((mb[2], mb[3], mb[5]), path.block[0], path.table_y, path.root_tower, path.s_root,
                            total_min, path.extents()))
@@ -1000,7 +1037,7 @@ def generate(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> tuple[str, 
         f"; Pfeilung {spec.sweep:g}, Schraenkung {spec.washout:g} deg, Kerf {machine.kerf_mm:g}, "
         f"Vorschub {machine.cut_feed:g} mm/min",
     ]
-    return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header), path
+    return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header, machine), path
 
 
 def _generate_ribs(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> tuple[str, WingPath]:
@@ -1016,8 +1053,8 @@ def _generate_ribs(spec: WingSpec, machine: Machine, airfoil_dir: Path) -> tuple
                   "; " + rib_prompt(path, k, n),
                   f"; Kerf {machine.kerf_mm:g}, Vorschub {machine.cut_feed:g} mm/min, "
                   f"beide Tuerme gleich (Rippe)"]
-        code = emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header)
-        total += contour_moves(path, machine.cut_feed)[1]
+        code = emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header, machine)
+        total += contour_moves(path, machine.cut_feed, machine)[1]
         first.programs.append((f"{stem}_rippe{k}.nc", code))
         if k > 1:
             first.notes.append(path.notes[1] + f"; Styropor {path.min_block[2]:.0f} x {path.min_block[3]:.0f} x "

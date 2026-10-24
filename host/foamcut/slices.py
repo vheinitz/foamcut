@@ -790,8 +790,8 @@ def generate(spec: SliceSpec, machine: Machine, airfoil_dir: Path | None = None)
         header = [f"; foamcut slice: Platte {b.number} von {len(boards)} - " + path.notes[1],
                   "; " + board_prompt(b),
                   f"; Kerf {machine.kerf_mm:g}, Vorschub {machine.cut_feed:g} mm/min"]
-        code = emit_gcode(p, machine.cut_feed, machine.wire_power, machine.warmup_s, header)
-        total += contour_moves(p, machine.cut_feed)[1]
+        code = emit_gcode(p, machine.cut_feed, machine.wire_power, machine.warmup_s, header, machine)
+        total += contour_moves(p, machine.cut_feed, machine)[1]
         name = f"{stem}_platte{b.number}.nc" if len(boards) > 1 else f"{stem}.nc"
         path.programs.append((name, code))
     path.notes.append(f"Schnittzeit ca. {total:.1f} min, {len(boards)} Platte(n)"

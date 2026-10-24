@@ -404,7 +404,7 @@ def build_path(spec: ShapeSpec, machine: Machine) -> WingPath:
 def generate(spec: ShapeSpec, machine: Machine, airfoil_dir: Path | None = None) -> tuple[str, WingPath]:
     path = build_path(spec, machine)
     header = ["; foamcut shape: " + path.notes[1][6:], f"; Kerf {machine.kerf_mm:g}, Vorschub {machine.cut_feed:g} mm/min"]
-    return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header), path
+    return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header, machine), path
 
 
 def shape_name(spec: ShapeSpec) -> str:

@@ -569,7 +569,7 @@ def generate(spec: ContourSpec, machine: Machine, airfoil_dir: Path | None = Non
     path = build_path(spec, machine)
     header = ["; foamcut contour: " + path.notes[1][8:],
               f"; Kerf {machine.kerf_mm:g}, Vorschub {machine.cut_feed:g} mm/min, Parallelschnitt X=U Y=V"]
-    return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header), path
+    return emit_gcode(path, machine.cut_feed, machine.wire_power, machine.warmup_s, header, machine), path
 
 
 def contour_name(spec: ContourSpec) -> str:

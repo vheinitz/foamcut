@@ -306,6 +306,33 @@ Geschwindigkeit behalten will, stellt stattdessen den Treiber zurück auf den
 angenommenen Mikroschritt (Jumper MS1/MS2 unter dem Treiber) und lässt den
 alten Wert stehen.
 
+### Was die feinen Schritte kosten: breiter Schnitt statt langsamer Schnitt
+
+Das ist keine Kleinigkeit. Die Schrittrate deckelt die Achse hart:
+
+| Y/V-Mikroschritt | Schritte/mm | höchster Vorschub |
+|---|---|---|
+| 1/32 | 17408 | **68,9 mm/min** |
+| 1/16 | 8704 | 137,9 |
+| 1/8 | 4352 | 275,9 |
+| 1/4 | 2176 | 551,7 |
+
+grbl sagt dazu nichts: es rechnet jede Bewegung auf ihre langsamste Achse
+herunter und fährt sie einfach länger. Ein `F` für 550 mm/min ist dann ein
+Wunsch, kein Vorschub. Beim Fräsen wäre das nur langsam — beim Heißdraht
+ändert es das Werkstück, weil der Draht an der Stelle länger steht und
+breiter schmilzt. Mit Y/V auf 1/32 und 550 mm/min Schnittvorschub laufen bei
+einem Clark-Y-Panel **122 von 124 Segmenten** gedrosselt, an der steilsten
+Stelle (Holmnut, senkrecht in die Haut) um Faktor 8. Der Schnittspalt ist dann
+nicht mehr der gemessene Kerf, sondern wandert mit der Bahnrichtung.
+
+Deshalb rechnet der Host seit 2026-10-24 die Achsgrenzen mit (`contour_moves`
+bekommt die `Machine`): die inverse-Zeit-`F`-Werte und die Schnittzeit stimmen
+mit dem überein, was die Maschine wirklich tut, und `ZU LANGSAM: …` nennt den
+Faktor und die bremsende Achse. Die Warnung ist aber nur eine Warnung — weg
+geht sie erst mit gröberem Mikroschritt an Y/V (oder einem Schnittvorschub,
+den alle vier Achsen können).
+
 ## The feed rate surprise
 
 This build sets `N_AXIS_LINEAR = 4`, so grbl applies the feed rate to the

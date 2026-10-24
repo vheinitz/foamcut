@@ -160,6 +160,12 @@ class Machine:
                 self.max_rate[a] = cap
         return notes
 
+    def slow_axes(self, feed: float) -> list[str]:
+        """Axes whose max_rate is below `feed`. A cut segment running along
+        such an axis is slowed down to that rate by grbl, whatever F says -
+        the wire then dwells longer and melts a wider channel."""
+        return [a for a in AXES if 0.0 < self.max_rate[a] < feed]
+
     # ----------------------------------------------------------- checks ----
     def check_extents(self, extents: dict[str, tuple[float, float]],
                       margin: float = 0.01) -> list[str]:

@@ -1,11 +1,12 @@
 import math
+import re
 from pathlib import Path
 
 import pytest
 
 from foamcut import airfoil as af
 from foamcut import gcode as gc
-from foamcut.machine import Machine
+from foamcut.machine import Machine, rate_cap
 from foamcut.wing import TEMPLATE, WingError, WingSpec, build_path, generate, cuts_ribs, rib_paths
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -769,3 +770,79 @@ def test_whole_panel_stays_the_default():
     assert not cuts_ribs(spec())
     code, path = generate(spec(), machine(), AIRFOILS)
     assert not path.programs and "rib" not in code.splitlines()[0]
+
+
+# --------------------------------------------------- axis rate ceilings ----
+_AX = re.compile(r"([XYUV])(-?[\d.]+)")
+
+
+def _segments(code):
+    """(dX, dY, dU, dV, minutes) per cut move. G93: F = 1/minutes."""
+    pos, out, inverse = {a: 0.0 for a in "XYUV"}, [], False
+    for ln in code.splitlines():
+        if ln.startswith("G93"):
+            inverse = True; continue
+        if ln.startswith("G94"):
+            inverse = False; continue
+        if not ln.startswith(("G0 ", "G1 ")):
+            continue
+        p = dict(pos) | {a: float(v) for a, v in _AX.findall(ln.split("F")[0])}
+        if inverse and ln.startswith("G1 "):     # the rapids only move `pos` along
+            f = float(ln.split("F")[-1].split()[0])
+            out.append(tuple(abs(p[a] - pos[a]) for a in "XYUV") + (1.0 / f,))
+        pos = p
+    return out
+
+
+def _fine_y(cut_feed):
+    """A machine with Y/V at 17408 steps/mm: 68.9 mm/min and no more."""
+    m = machine(cut_feed=cut_feed)
+    m.steps_per_mm = {"X": 1600.0, "Y": 17408.0, "U": 1600.0, "V": 17408.0}
+    m.max_rate = {a: rate_cap(s) for a, s in m.steps_per_mm.items()}
+    return m
+
+
+def test_no_cut_move_asks_an_axis_for_more_than_its_max_rate():
+    # A 550 mm/min cut feed is a wish, not a setting: grbl slows every move
+    # down to its slowest axis, so the host has to plan with that rate too.
+    m = _fine_y(550.0)
+    code, _ = generate(spec(holm1="180 6x4"), m, AIRFOILS)
+    segs = [s for s in _segments(code) if s[4] > 0]
+    assert len(segs) > 50
+    for dx, dy, du, dv, minutes in segs:
+        for a, d in zip("XYUV", (dx, dy, du, dv)):
+            # 0.5 % slack: the coordinates are written to 3 decimals, so a
+            # 0.44 mm step carries 0.1 % of rounding on its own
+            assert d / minutes <= m.max_rate[a] * 1.005, f"{a}: {d / minutes:.1f} > {m.max_rate[a]:g}"
+
+
+def test_a_slot_straight_into_the_skin_runs_at_the_vertical_max_rate():
+    m = _fine_y(550.0)
+    code, path = generate(spec(holm1="180 6x4"), m, AIRFOILS)
+    # the spar slot cuts straight down into the lower skin: the most vertical
+    # segment of the whole contour is in there, and Y alone decides its time
+    dx, dy, du, dv, minutes = max(_segments(code), key=lambda s: s[1] - s[0])
+    assert dy / minutes == pytest.approx(m.max_rate["Y"], rel=0.02)
+    assert any(n.startswith("ZU LANGSAM") and "Y/V" in n for n in path.notes)
+
+
+def test_the_cut_time_counts_the_axis_limits_in():
+    m = _fine_y(550.0)
+    _, path = generate(spec(holm1="180 6x4"), m, AIRFOILS)
+    note = next(n for n in path.notes if n.startswith("ZU LANGSAM"))
+    real, ideal = (float(x) for x in re.search(r"([\d.]+) statt ([\d.]+) min", note).groups())
+    assert real > ideal * 1.5
+    assert f"{real:.1f} min" in next(n for n in path.notes if n.startswith("Schnittzeit"))
+
+
+def test_a_feed_every_axis_can_do_leaves_no_warning():
+    m = machine(cut_feed=100.0)       # defaults: Y/V 8704 steps/mm -> 137.9 mm/min
+    _, path = generate(spec(), m, AIRFOILS)
+    assert not [n for n in path.notes if n.startswith("ZU LANGSAM")]
+
+
+def test_slow_axes_names_what_cannot_keep_up():
+    m = machine()
+    m.max_rate = {"X": 750.0, "Y": 68.9, "U": 375.0, "V": 68.9}
+    assert m.slow_axes(550.0) == ["Y", "U", "V"]     # X alone is fast enough
+    assert m.slow_axes(60.0) == []

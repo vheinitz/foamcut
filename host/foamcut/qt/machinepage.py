@@ -68,6 +68,7 @@ class MachinePage(QWidget):
             w.setText(f"{getattr(machine, attr):g}")
             w.editingFinished.connect(lambda w=w, attr=attr: self._cut_setting(w, attr))
         self.power.sliderReleased.connect(self._power_changed)
+        self._feed_warning()
         # machine geometry: it belongs here, not on every design page
         self.gap.setText(f"{machine.tower_gap_mm:g}"); self.gap.editingFinished.connect(self._gap_changed)
         self.fixed.addItems(["Turm 1 (X/Y)", "Turm 2 (U/V)"])
@@ -122,7 +123,23 @@ class MachinePage(QWidget):
             self.log(f"! {attr}: keine gueltige Zahl"); w.setText(f"{getattr(self.machine, attr):g}"); return
         if val != getattr(self.machine, attr):
             setattr(self.machine, attr, val); self.machine.save()
-            self.log(f"{attr} = {val:g} gespeichert (machine.json)"); self.machine_changed.emit()
+            self.log(f"{attr} = {val:g} gespeichert (machine.json)")
+            if attr == "cut_feed":
+                self._feed_warning()
+            self.machine_changed.emit()
+
+    def _feed_warning(self) -> None:
+        """A cut feed above an axis' max_rate is not a setting, it is a wish:
+        grbl slows every move down to its slowest axis, and the wire melts a
+        wider channel wherever that happens."""
+        slow = self.machine.slow_axes(self.machine.cut_feed)
+        if not slow:
+            return
+        rate = min(self.machine.max_rate[a] for a in slow)
+        self.log(f"! Schnittvorschub {self.machine.cut_feed:g} mm/min: "
+                 + ", ".join(f"{a} kann nur {self.machine.max_rate[a]:g}" for a in slow)
+                 + f" mm/min. Schnitte entlang dieser Achsen laufen mit bis zu {rate:g} mm/min"
+                 " und werden dort breiter als der eingestellte Kerf.")
 
     def show_travel(self):
         t = self.machine.travel_mm
