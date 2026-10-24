@@ -149,8 +149,8 @@ move where both towers travel 100 mm gives each tower 212 mm/min, not 300.
 
 ## Licence
 
-`firmware/grbl5x/overlay/` and `configure.py` derive from grbl-Mega-5X and are
-GPLv3. The rest is yours to do as you like with.
+GPL-3.0, see [LICENSE](LICENSE). `firmware/grbl5x/overlay/` and `configure.py`
+derive from grbl-Mega-5X (GPLv3); the host GUI uses PyQt6 (GPL).
 
 ## Erster Testlauf
 
