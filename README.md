@@ -5,7 +5,7 @@ GT2560. Two independent towers, four axes: **X/Y** on the left tower, **U/V**
 on the right. Firmware is [grbl-Mega-5X](https://github.com/fra589/grbl-Mega-5X)
 with a GT2560 pin map written for this project.
 
-Nothing here needs the machine to exist yet — `make test` runs 331 tests
+Nothing here needs the machine to exist yet — `make test` runs 338 tests
 offline, including a cross-check that the two firmwares' pin maps describe the
 same physical board.
 
